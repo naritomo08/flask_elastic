@@ -3,6 +3,7 @@ services:
     build: .
     ports:
       - "5001:5000"
+    restart: unless-stopped
     environment:
       ELASTICSEARCH_URL: http://elastic1:9200
       ELASTICSEARCH_INDEX: logs-*
