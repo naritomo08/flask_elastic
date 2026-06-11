@@ -89,37 +89,36 @@ def datetime_local_to_iso(value):
         return value
 
 
+def wildcard_value(value):
+    escaped = value.replace("\\", "\\\\").replace("*", "\\*").replace("?", "\\?")
+    return f"*{escaped}*"
+
+
+def text_search_clause(field, value):
+    return {
+        "bool": {
+            "should": [
+                {"match_phrase": {field: {"query": value}}},
+                {"match": {field: {"query": value, "operator": "and"}}},
+                {"wildcard": {field: {"value": wildcard_value(value), "case_insensitive": True}}},
+                {"wildcard": {f"{field}.keyword": {"value": wildcard_value(value), "case_insensitive": True}}},
+            ],
+            "minimum_should_match": 1,
+        }
+    }
+
+
 def build_query(filters):
     must = []
     filter_clauses = []
 
     if filters["message"]:
-        must.append(
-            {
-                "bool": {
-                    "should": [
-                        {"match": {"msg": {"query": filters["message"]}}},
-                        {"match_phrase": {"msg": {"query": filters["message"]}}},
-                    ],
-                    "minimum_should_match": 1,
-                }
-            }
-        )
+        must.append(text_search_clause("msg", filters["message"]))
     if filters["program"]:
-        must.append(
-            {
-                "bool": {
-                    "should": [
-                        {"match": {"program": {"query": filters["program"]}}},
-                        {"match_phrase": {"program": {"query": filters["program"]}}},
-                    ],
-                    "minimum_should_match": 1,
-                }
-            }
-        )
+        must.append(text_search_clause("program", filters["program"]))
 
     if filters["host"]:
-        filter_clauses.append({"wildcard": {"host": {"value": f"*{filters['host']}*", "case_insensitive": True}}})
+        filter_clauses.append({"wildcard": {"host": {"value": wildcard_value(filters["host"]), "case_insensitive": True}}})
 
     time_range = {}
     if filters["time_from"]:

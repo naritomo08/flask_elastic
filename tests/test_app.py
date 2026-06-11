@@ -72,8 +72,9 @@ def test_build_query_with_message_program_host_and_time_range():
 
     query = log_app.build_query(filters)
 
-    assert query["bool"]["must"][0]["bool"]["should"][0] == {"match": {"msg": {"query": "sshd"}}}
-    assert query["bool"]["must"][1]["bool"]["should"][0] == {"match": {"program": {"query": "systemd"}}}
+    assert query["bool"]["must"][0]["bool"]["should"][0] == {"match_phrase": {"msg": {"query": "sshd"}}}
+    assert query["bool"]["must"][0]["bool"]["should"][1] == {"match": {"msg": {"query": "sshd", "operator": "and"}}}
+    assert query["bool"]["must"][1]["bool"]["should"][0] == {"match_phrase": {"program": {"query": "systemd"}}}
     assert {"wildcard": {"host": {"value": "*flink1*", "case_insensitive": True}}} in query["bool"]["filter"]
     assert {
         "range": {
@@ -83,6 +84,18 @@ def test_build_query_with_message_program_host_and_time_range():
             }
         }
     } in query["bool"]["filter"]
+
+
+def test_build_query_supports_space_separated_message_search():
+    filters = log_app.normalize_filters({"message": "authlog forward test from"})
+
+    query = log_app.build_query(filters)
+    message_should = query["bool"]["must"][0]["bool"]["should"]
+
+    assert {"match_phrase": {"msg": {"query": "authlog forward test from"}}} in message_should
+    assert {"match": {"msg": {"query": "authlog forward test from", "operator": "and"}}} in message_should
+    assert {"wildcard": {"msg": {"value": "*authlog forward test from*", "case_insensitive": True}}} in message_should
+    assert {"wildcard": {"msg.keyword": {"value": "*authlog forward test from*", "case_insensitive": True}}} in message_should
 
 
 def test_search_logs_uses_log_specific_index_and_formats_result(fake_client):
