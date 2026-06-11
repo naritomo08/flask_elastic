@@ -74,8 +74,24 @@ def test_build_query_with_message_program_host_and_time_range():
 
     assert query["bool"]["must"][0]["bool"]["should"][0] == {"match_phrase": {"msg": {"query": "sshd"}}}
     assert query["bool"]["must"][0]["bool"]["should"][1] == {"match": {"msg": {"query": "sshd", "operator": "and"}}}
-    assert query["bool"]["must"][1]["bool"]["should"][0] == {"match_phrase": {"program": {"query": "systemd"}}}
-    assert {"wildcard": {"host": {"value": "*flink1*", "case_insensitive": True}}} in query["bool"]["filter"]
+    assert {
+        "bool": {
+            "should": [
+                {"term": {"program.keyword": {"value": "systemd"}}},
+                {"term": {"program": {"value": "systemd"}}},
+            ],
+            "minimum_should_match": 1,
+        }
+    } in query["bool"]["filter"]
+    assert {
+        "bool": {
+            "should": [
+                {"term": {"host.keyword": {"value": "flink1"}}},
+                {"term": {"host": {"value": "flink1"}}},
+            ],
+            "minimum_should_match": 1,
+        }
+    } in query["bool"]["filter"]
     assert {
         "range": {
             "@timestamp": {
@@ -115,6 +131,40 @@ def test_search_logs_uses_log_specific_index_and_formats_result(fake_client):
     assert search_call["size"] == 50
     assert logs[0]["display_time"] == "2026/06/02 20:11:55 JST"
     assert logs[0]["log_type"] == "syslog"
+
+
+def test_search_logs_filters_host_and_program_exactly_after_search(fake_client):
+    fake_client.search = lambda **kwargs: {
+        "hits": {
+            "hits": [
+                {
+                    "_id": "1",
+                    "_index": ".ds-logs-syslog-2026.06.02-000001",
+                    "_source": {
+                        "@timestamp": 1780398715000,
+                        "host": "flink1",
+                        "program": "systemd",
+                        "msg": "exact",
+                    },
+                },
+                {
+                    "_id": "2",
+                    "_index": ".ds-logs-syslog-2026.06.02-000001",
+                    "_source": {
+                        "@timestamp": 1780398715000,
+                        "host": "flink10",
+                        "program": "systemd-logind",
+                        "msg": "partial",
+                    },
+                },
+            ]
+        }
+    }
+    filters = log_app.normalize_filters({"host": "flink1", "program": "systemd"})
+
+    logs = log_app.search_logs(fake_client, filters)
+
+    assert [log["id"] for log in logs] == ["1"]
 
 
 def test_post_index_search_keeps_filters_in_body(flask_client):

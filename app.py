@@ -108,6 +108,26 @@ def text_search_clause(field, value):
     }
 
 
+def exact_match_clause(field, value):
+    return {
+        "bool": {
+            "should": [
+                {"term": {f"{field}.keyword": {"value": value}}},
+                {"term": {field: {"value": value}}},
+            ],
+            "minimum_should_match": 1,
+        }
+    }
+
+
+def log_matches_exact_filters(log, filters):
+    for field in ("host", "program"):
+        expected = filters[field]
+        if expected and log.get(field) != expected:
+            return False
+    return True
+
+
 def build_query(filters):
     must = []
     filter_clauses = []
@@ -115,10 +135,10 @@ def build_query(filters):
     if filters["message"]:
         must.append(text_search_clause("msg", filters["message"]))
     if filters["program"]:
-        must.append(text_search_clause("program", filters["program"]))
+        filter_clauses.append(exact_match_clause("program", filters["program"]))
 
     if filters["host"]:
-        filter_clauses.append({"wildcard": {"host": {"value": wildcard_value(filters["host"]), "case_insensitive": True}}})
+        filter_clauses.append(exact_match_clause("host", filters["host"]))
 
     time_range = {}
     if filters["time_from"]:
@@ -170,16 +190,16 @@ def search_logs(client, filters):
     logs = []
     for hit in response["hits"]["hits"]:
         source = hit["_source"]
-        logs.append(
-            {
-                **source,
-                "id": hit["_id"],
-                "index": hit["_index"],
-                "log_type": detect_log_type(hit["_index"]),
-                "display_time": format_timestamp(source.get("@timestamp")),
-                "score": hit.get("_score"),
-            }
-        )
+        log = {
+            **source,
+            "id": hit["_id"],
+            "index": hit["_index"],
+            "log_type": detect_log_type(hit["_index"]),
+            "display_time": format_timestamp(source.get("@timestamp")),
+            "score": hit.get("_score"),
+        }
+        if log_matches_exact_filters(log, filters):
+            logs.append(log)
     return logs
 
 
