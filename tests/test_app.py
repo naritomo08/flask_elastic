@@ -1,6 +1,7 @@
 import pytest
 
 import app as log_app
+import elasticsearch_logs as log_search
 
 
 class FakeElasticsearch:
@@ -46,18 +47,18 @@ def flask_client(fake_client):
 
 
 def test_format_timestamp_converts_epoch_millis_to_jst():
-    assert log_app.format_timestamp(1780398715000) == "2026/06/02 20:11:55 JST"
+    assert log_search.format_timestamp(1780398715000) == "2026/06/02 20:11:55 JST"
 
 
 def test_datetime_local_to_iso_treats_input_as_jst():
-    converted = log_app.datetime_local_to_iso("2026-06-02T20:11")
+    converted = log_search.datetime_local_to_iso("2026-06-02T20:11")
     assert converted == "2026-06-02T11:11:00+00:00"
 
 
 def test_detect_log_type_from_index_name():
-    assert log_app.detect_log_type(".ds-logs-syslog-2026.06.02-000001") == "syslog"
-    assert log_app.detect_log_type(".ds-logs-authlog-2026.06.02-000001") == "authlog"
-    assert log_app.detect_log_type("metrics-2026.06.02") == "unknown"
+    assert log_search.detect_log_type(".ds-logs-syslog-2026.06.02-000001") == "syslog"
+    assert log_search.detect_log_type(".ds-logs-authlog-2026.06.02-000001") == "authlog"
+    assert log_search.detect_log_type("metrics-2026.06.02") == "unknown"
 
 
 def test_build_query_with_message_program_host_and_time_range():
@@ -70,7 +71,7 @@ def test_build_query_with_message_program_host_and_time_range():
         "message": "sshd",
     }
 
-    query = log_app.build_query(filters)
+    query = log_search.build_query(filters)
 
     assert query["bool"]["must"][0]["bool"]["should"][0] == {"match_phrase": {"msg": {"query": "sshd"}}}
     assert query["bool"]["must"][0]["bool"]["should"][1] == {"match": {"msg": {"query": "sshd", "operator": "and"}}}
@@ -103,9 +104,9 @@ def test_build_query_with_message_program_host_and_time_range():
 
 
 def test_build_query_supports_space_separated_message_search():
-    filters = log_app.normalize_filters({"message": "authlog forward test from"})
+    filters = log_search.normalize_filters({"message": "authlog forward test from"})
 
-    query = log_app.build_query(filters)
+    query = log_search.build_query(filters)
     message_should = query["bool"]["must"][0]["bool"]["should"]
 
     assert {"match_phrase": {"msg": {"query": "authlog forward test from"}}} in message_should
@@ -124,7 +125,7 @@ def test_search_logs_uses_log_specific_index_and_formats_result(fake_client):
         "message": "sshd",
     }
 
-    logs = log_app.search_logs(fake_client, filters)
+    logs = log_search.search_logs(fake_client, filters)
 
     search_call = fake_client.search_calls[0]
     assert search_call["index"] == "logs-syslog-*"
@@ -160,9 +161,9 @@ def test_search_logs_filters_host_and_program_exactly_after_search(fake_client):
             ]
         }
     }
-    filters = log_app.normalize_filters({"host": "flink1", "program": "systemd"})
+    filters = log_search.normalize_filters({"host": "flink1", "program": "systemd"})
 
-    logs = log_app.search_logs(fake_client, filters)
+    logs = log_search.search_logs(fake_client, filters)
 
     assert [log["id"] for log in logs] == ["1"]
 
