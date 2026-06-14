@@ -125,8 +125,3 @@ environment:
 extra_hosts:
   - "elastic1:192.168.11.20"
 ```
-
-## 他言語版
-
-フロントエンドの `Backend` セレクトから Flask / Go / Java / PHP / Ruby / Elixir を切り替えられます。
-各 backend は同じ API 契約を実装しているため、言語比較やパフォーマンス比較にも利用できます。
