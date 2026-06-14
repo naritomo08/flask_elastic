@@ -11,6 +11,8 @@ RUN apt-get update \
     && docker-php-ext-install curl \
     && rm -rf /var/lib/apt/lists/* \
     && a2enmod rewrite \
+    && sed -ri -e 's/^Listen 80$/Listen 5000/' /etc/apache2/ports.conf \
+    && sed -ri -e 's/<VirtualHost \*:80>/<VirtualHost *:5000>/' /etc/apache2/sites-available/*.conf \
     && sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
     && sed -ri -e 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
@@ -19,4 +21,4 @@ WORKDIR /var/www/html
 COPY . /var/www/html/
 COPY --from=vendor /app/vendor /var/www/html/vendor
 
-EXPOSE 80
+EXPOSE 5000
