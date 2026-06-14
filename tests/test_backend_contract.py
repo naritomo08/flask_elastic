@@ -8,7 +8,7 @@ import pytest
 
 
 DEFAULT_TARGETS = {
-    "flask": "http://backend:5000",
+    "flask": "http://backend-python:5000",
     "go": "http://backend-go:5000",
     "java": "http://backend-java:5000",
     "php": "http://backend-php:80",

@@ -21,7 +21,7 @@ docker compose up --build
 Compose では以下のコンテナを起動します。
 
 - `frontend`: nginx で `frontend/` の HTML / CSS / JS を配信します
-- `backend`: Flask / gunicorn で JSON API を提供します
+- `backend-python`: Python / Flask / gunicorn で JSON API を提供します
 - `backend-go`: Go で JSON API を提供します
 - `backend-java`: Java で JSON API を提供します
 - `backend-php`: PHP / Slim で JSON API を提供します
@@ -34,7 +34,7 @@ Elasticsearch / Kibana はこの Compose には含めません。
 公開ポート:
 
 - `frontend`: http://localhost:8080
-- `backend` Flask: http://localhost:5005
+- `backend-python`: http://localhost:5005
 - `backend-go`: http://localhost:5006
 - `backend-java`: http://localhost:5007
 - `backend-php`: http://localhost:5008
