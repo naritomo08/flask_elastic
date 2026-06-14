@@ -1,15 +1,22 @@
-FROM python:3.12-slim
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+FROM composer:2 AS vendor
 
 WORKDIR /app
+COPY composer.json composer.lock .
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+FROM php:8.3-apache
 
-COPY . .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libcurl4-openssl-dev \
+    && docker-php-ext-install curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && a2enmod rewrite \
+    && sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf \
+    && sed -ri -e 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
-EXPOSE 5000
+WORKDIR /var/www/html
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+COPY . /var/www/html/
+COPY --from=vendor /app/vendor /var/www/html/vendor
+
+EXPOSE 80
