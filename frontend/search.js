@@ -22,7 +22,7 @@ if (searchForm && resultsSummary && resultsBody) {
         body: JSON.stringify(formPayload(searchForm))
       });
 
-      const payload = await response.json();
+      const payload = await readJsonResponse(response);
       if (!response.ok) {
         throw new Error(payload.error || "検索に失敗しました。");
       }
@@ -62,7 +62,7 @@ async function loadOptions() {
         "Accept": "application/json"
       }
     });
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     if (!response.ok) {
       throw new Error(payload.error || "検索条件の取得に失敗しました。");
     }
@@ -92,6 +92,16 @@ function formPayload(form) {
   const payload = Object.fromEntries(new FormData(form).entries());
   delete payload.backend_language;
   return payload;
+}
+
+async function readJsonResponse(response) {
+  const contentType = response.headers.get("Content-Type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  return { error: text.trim() || response.statusText };
 }
 
 function setSummary(...items) {

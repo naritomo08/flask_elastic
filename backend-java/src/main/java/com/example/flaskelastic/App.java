@@ -161,7 +161,7 @@ public class App {
             payload.put("logs", logs);
             sendJson(exchange, 200, payload);
         } catch (Exception ex) {
-            sendText(exchange, 502, ex.getMessage(), "text/plain; charset=utf-8");
+            sendJson(exchange, 502, Map.of("error", ex.getMessage()));
         }
     }
 

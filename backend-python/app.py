@@ -37,7 +37,10 @@ def api_options():
 @app.route("/api/logs", methods=["GET", "POST"])
 def api_search_logs():
     filters = filters_from_request()
-    logs = search_logs(get_client(), filters)
+    try:
+        logs = search_logs(get_client(), filters)
+    except Exception as error:
+        return jsonify({"error": str(error)}), 502
     return jsonify({"filters": filters, "count": len(logs), "logs": logs})
 
 

@@ -31,14 +31,12 @@ defmodule ElixirElastic.Router do
   get "/api/logs" do
     conn = fetch_query_params(conn)
     filters = normalize_filters(conn.query_params)
-    logs = ElasticSearch.search_logs(filters)
-    json(conn, %{filters: filters, count: length(logs), logs: logs})
+    search_json(conn, filters)
   end
 
   post "/api/logs" do
     filters = normalize_filters(conn.body_params)
-    logs = ElasticSearch.search_logs(filters)
-    json(conn, %{filters: filters, count: length(logs), logs: logs})
+    search_json(conn, filters)
   end
 
   get "/api/options" do
@@ -68,8 +66,21 @@ defmodule ElixirElastic.Router do
   defp clean(value), do: String.trim(to_string(value))
 
   defp json(conn, payload) do
+    json(conn, 200, payload)
+  end
+
+  defp json(conn, status, payload) do
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(payload))
+    |> send_resp(status, Jason.encode!(payload))
+  end
+
+  defp search_json(conn, filters) do
+    try do
+      logs = ElasticSearch.search_logs(filters)
+      json(conn, %{filters: filters, count: length(logs), logs: logs})
+    rescue
+      error -> json(conn, 502, %{error: Exception.message(error)})
+    end
   end
 end
