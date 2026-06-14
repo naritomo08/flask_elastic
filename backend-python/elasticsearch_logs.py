@@ -13,7 +13,7 @@ JST = timezone(timedelta(hours=9), "JST")
 
 
 def get_client():
-    return Elasticsearch(ELASTICSEARCH_URL, request_timeout=10)
+    return Elasticsearch(ELASTICSEARCH_URL, request_timeout=3)
 
 
 def wait_for_elasticsearch(client, retries=30, delay=2):

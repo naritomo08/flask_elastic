@@ -11,7 +11,7 @@ class ElasticsearchClient
 
   def ping
     uri = URI(@base_url)
-    response = request(Net::HTTP::Head.new(uri), uri, timeout: 5)
+    response = request(Net::HTTP::Head.new(uri), uri, timeout: 3)
     response.is_a?(Net::HTTPSuccess) || response.is_a?(Net::HTTPRedirection)
   rescue StandardError
     false

@@ -10,6 +10,7 @@ const backends = [
 const healthSummary = document.getElementById("health-summary");
 const healthBody = document.getElementById("health-body");
 const refreshIntervalMs = 10000;
+const healthTimeoutMs = 3000;
 let hasRenderedHealth = false;
 let isLoadingHealth = false;
 
@@ -39,8 +40,13 @@ async function loadHealth() {
 }
 
 async function checkBackend(backend) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), healthTimeoutMs);
+
   try {
     const response = await fetch(`/health/${backend.id}`, {
+      cache: "no-store",
+      signal: controller.signal,
       headers: {
         "Accept": "application/json"
       }
@@ -51,7 +57,10 @@ async function checkBackend(backend) {
     }
     return { backend, ok: payload.ok === true, payload };
   } catch (error) {
-    return { backend, ok: false, error: error.message || "connection failed" };
+    const message = error.name === "AbortError" ? "health check timed out" : error.message;
+    return { backend, ok: false, error: message || "connection failed" };
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 }
 

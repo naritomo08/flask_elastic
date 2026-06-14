@@ -194,7 +194,7 @@ function elasticsearch_request(string $method, string $url, ?array $body = null,
 function elasticsearch_ping(array $config): bool
 {
     try {
-        elasticsearch_request('HEAD', rtrim($config['elasticsearch_url'], '/'), null, 5);
+        elasticsearch_request('HEAD', rtrim($config['elasticsearch_url'], '/'), null, 3);
         return true;
     } catch (Throwable) {
         return false;

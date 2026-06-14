@@ -7,7 +7,7 @@ defmodule ElixirElastic.ElasticSearch do
   def log_types, do: @log_types
 
   def ping do
-    case Req.get(elasticsearch_url(), receive_timeout: 10_000) do
+    case Req.get(elasticsearch_url(), receive_timeout: 3_000) do
       {:ok, %{status: status}} when status in 200..399 -> true
       _ -> false
     end

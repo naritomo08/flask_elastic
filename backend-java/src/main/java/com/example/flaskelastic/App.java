@@ -565,7 +565,7 @@ public class App {
         public boolean ping() {
             try {
                 HttpRequest request = HttpRequest.newBuilder(baseUri)
-                        .timeout(java.time.Duration.ofSeconds(5))
+                        .timeout(java.time.Duration.ofSeconds(3))
                         .method("HEAD", HttpRequest.BodyPublishers.noBody())
                         .build();
                 HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());

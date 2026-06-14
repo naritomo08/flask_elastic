@@ -138,7 +138,7 @@ func NewElasticClient(baseURL string) *ElasticClient {
 }
 
 func (c *ElasticClient) Ping(ctx context.Context) bool {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, c.baseURL, nil)
