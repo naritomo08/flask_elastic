@@ -5,6 +5,10 @@ services:
       - "8080:80"
     depends_on:
       - backend
+      - backend-go
+      - backend-java
+      - backend-php
+      - backend-ruby
     restart: unless-stopped
 
   backend:
@@ -12,10 +16,69 @@ services:
     ports:
       - "5005:5000"
     restart: unless-stopped
-    volumes:
-      - ./tests:/app/tests:ro
     environment:
       ELASTICSEARCH_URL: http://elastic1:9200
       ELASTICSEARCH_INDEX: logs-*
     extra_hosts:
       - "elastic1:192.168.11.20"
+
+  backend-go:
+    build: ./backend-go
+    ports:
+      - "5006:5000"
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_URL: http://elastic1:9200
+      ELASTICSEARCH_INDEX: logs-*
+    extra_hosts:
+      - "elastic1:192.168.11.20"
+
+  backend-java:
+    build: ./backend-java
+    ports:
+      - "5007:5000"
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_URL: http://elastic1:9200
+      ELASTICSEARCH_INDEX: logs-*
+    extra_hosts:
+      - "elastic1:192.168.11.20"
+
+  backend-php:
+    build: ./backend-php
+    ports:
+      - "5008:80"
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_URL: http://elastic1:9200
+      ELASTICSEARCH_INDEX: logs-*
+    extra_hosts:
+      - "elastic1:192.168.11.20"
+
+  backend-ruby:
+    build: ./backend-ruby
+    ports:
+      - "5009:5000"
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_URL: http://elastic1:9200
+      ELASTICSEARCH_INDEX: logs-*
+    extra_hosts:
+      - "elastic1:192.168.11.20"
+
+  backend-contract-tests:
+    build: ./backend
+    profiles:
+      - test
+    depends_on:
+      - backend
+      - backend-go
+      - backend-java
+      - backend-php
+      - backend-ruby
+    volumes:
+      - ./tests:/app/tests:ro
+    environment:
+      BACKEND_TARGETS: flask=http://backend:5000,go=http://backend-go:5000,java=http://backend-java:5000,php=http://backend-php:80,ruby=http://backend-ruby:5000
+      RUN_SEARCH_CONTRACT_TESTS: ${RUN_SEARCH_CONTRACT_TESTS:-0}
+    command: ["pytest", "/app/tests"]

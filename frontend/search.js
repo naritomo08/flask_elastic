@@ -1,6 +1,7 @@
 const searchForm = document.getElementById("search-form");
 const resultsSummary = document.getElementById("results-summary");
 const logTypeSelect = document.getElementById("log-type");
+const backendLanguageSelect = document.getElementById("backend-language");
 let resultsBody = document.getElementById("results-body");
 
 loadOptions();
@@ -12,7 +13,7 @@ if (searchForm && resultsSummary && resultsBody) {
     replaceResultsBody(emptyMessage("検索中", "empty searching"));
 
     try {
-      const response = await fetch(searchForm.action, {
+      const response = await fetch(apiPath("logs"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -39,6 +40,12 @@ if (searchForm && resultsSummary && resultsBody) {
       replaceResultsBody(emptyMessage("検索条件を入力して検索ボタンを押してください。"));
     }, 0);
   });
+
+  backendLanguageSelect?.addEventListener("change", () => {
+    loadOptions();
+    setSummary(`${selectedBackendLabel()} backend を選択中`);
+    replaceResultsBody(emptyMessage("検索条件を入力して検索ボタンを押してください。"));
+  });
 }
 
 async function loadOptions() {
@@ -47,7 +54,10 @@ async function loadOptions() {
   }
 
   try {
-    const response = await fetch("/api/options", {
+    const selected = logTypeSelect.value;
+    logTypeSelect.replaceChildren(new Option("すべて", ""));
+
+    const response = await fetch(apiPath("options"), {
       headers: {
         "Accept": "application/json"
       }
@@ -63,13 +73,25 @@ async function loadOptions() {
       option.textContent = logType;
       logTypeSelect.append(option);
     });
+    logTypeSelect.value = selected;
   } catch (error) {
     console.error(error);
   }
 }
 
+function apiPath(endpoint) {
+  const backend = backendLanguageSelect?.value || "flask";
+  return `/api/${backend}/${endpoint}`;
+}
+
+function selectedBackendLabel() {
+  return backendLanguageSelect?.selectedOptions[0]?.textContent || "Flask";
+}
+
 function formPayload(form) {
-  return Object.fromEntries(new FormData(form).entries());
+  const payload = Object.fromEntries(new FormData(form).entries());
+  delete payload.backend_language;
+  return payload;
 }
 
 function setSummary(...items) {

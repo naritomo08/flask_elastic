@@ -1,6 +1,6 @@
 # flask_elastic
 
-既存の Elasticsearch に保存したログを、静的フロントエンドと Flask API バックエンドで検索するアプリです。
+既存の Elasticsearch に保存したログを、共通の静的フロントエンドと複数言語の API バックエンドで検索するアプリです。
 Elasticsearch は以下の記事の構成で作成済みのものを利用します。
 
 https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
@@ -18,25 +18,46 @@ docker compose up --build
 
 ブラウザで http://localhost:8080 を開きます。
 
-Compose では以下の2コンテナを起動します。
+Compose では以下のコンテナを起動します。
 
 - `frontend`: nginx で `frontend/` の HTML / CSS / JS を配信します
 - `backend`: Flask / gunicorn で JSON API を提供します
+- `backend-go`: Go で JSON API を提供します
+- `backend-java`: Java で JSON API を提供します
+- `backend-php`: PHP / Slim で JSON API を提供します
+- `backend-ruby`: Ruby / Sinatra で JSON API を提供します
 
 Elasticsearch / Kibana はこの Compose には含めません。
-フロントエンドは `/api/...` を呼び、nginx が `backend:5000` へプロキシします。
+フロントエンドは言語選択に応じて `/api/flask/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。
+
+公開ポート:
+
+- `frontend`: http://localhost:8080
+- `backend` Flask: http://localhost:5005
+- `backend-go`: http://localhost:5006
+- `backend-java`: http://localhost:5007
+- `backend-php`: http://localhost:5008
+- `backend-ruby`: http://localhost:5009
 
 ## API
 
 ログ検索:
 
 ```bash
-curl -X POST http://localhost:8080/api/logs \
+curl -X POST http://localhost:8080/api/flask/logs \
   -H "Content-Type: application/json" \
   -d '{
     "message":"timeout",
     "log_type":"syslog"
   }'
+```
+
+Go backend を frontend 経由で呼ぶ例:
+
+```bash
+curl -X POST http://localhost:8080/api/go/logs \
+  -H "Content-Type: application/json" \
+  -d '{"message":"timeout","log_type":"syslog"}'
 ```
 
 ヘルスチェック:
@@ -45,32 +66,37 @@ curl -X POST http://localhost:8080/api/logs \
 curl http://localhost:8080/health
 ```
 
-バックエンドを直接確認する場合:
+追加 backend を直接確認する場合:
 
 ```bash
-curl http://localhost:5005/api/options
+curl http://localhost:5006/api/options
 ```
 
-## テスト
+## 共通 backend テスト
 
-pytest でアプリの主要処理を確認できます。
-テストでは Elasticsearch に実接続せず、Fake クライアントを使います。
+pytest で全 backend の HTTP API 契約を確認できます。
+テストは各言語の実装内部を import せず、起動中の backend に同じリクエストを送ります。
 
 実行方法:
 
 ```bash
 docker compose build
-docker compose run --rm backend pytest
+docker compose --profile test run --rm backend-contract-tests
 ```
 
 確認している内容:
 
-- JST の時刻表示変換
-- 検索条件から Elasticsearch クエリを組み立てる処理
-- `syslog` / `authlog` のログ種別判定
+- `GET /` による backend メタ情報
+- `GET /health` によるヘルスチェック形式
 - `GET /api/options` による検索条件取得
-- `POST /api/logs` による JSON API 検索
-- 検索結果の表示用フィールド作成
+
+Elasticsearch に接続できる環境で検索 API まで確認する場合:
+
+```bash
+RUN_SEARCH_CONTRACT_TESTS=1 docker compose --profile test run --rm backend-contract-tests
+```
+
+その場合は `POST /api/logs` のレスポンス形式も確認します。
 
 ## 設定
 
@@ -91,9 +117,5 @@ extra_hosts:
 
 ## 他言語版
 
-本サイトは Python / Flask 版です。
-ブランチを切り替えれば Go / Java / PHP / Ruby 版にもなります。
-
-ブランチ名がそのままその言語版になります。
-
-言語比較やパフォーマンス比較にもご利用ください。
+フロントエンドの `Backend` セレクトから Flask / Go / Java / PHP / Ruby を切り替えられます。
+各 backend は同じ API 契約を実装しているため、言語比較やパフォーマンス比較にも利用できます。
