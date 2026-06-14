@@ -168,62 +168,20 @@ def test_search_logs_filters_host_and_program_exactly_after_search(fake_client):
     assert [log["id"] for log in logs] == ["1"]
 
 
-def test_post_index_search_keeps_filters_in_body(flask_client):
-    response = flask_client.post("/", data={"program": "systemd", "message": "sshd"})
-
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/"
-
+def test_api_root_describes_backend_service(flask_client):
     response = flask_client.get("/")
+
     assert response.status_code == 200
-    html = response.get_data(as_text=True)
-    assert 'method="post"' in html
-    assert 'id="search-form"' in html
-    assert 'id="results-summary"' in html
-    assert 'id="results-body"' in html
-    assert 'src="/static/search.js"' in html
-    assert 'value="systemd"' in html
-    assert 'value="sshd"' in html
-    assert "2026/06/02 20:11:55 JST" in html
-
-    response = flask_client.get("/")
-    html = response.get_data(as_text=True)
-    assert 'value="systemd"' not in html
-    assert 'value="sshd"' not in html
-    assert "2026/06/02 20:11:55 JST" not in html
-    assert "検索を実施してください" in html
+    payload = response.get_json()
+    assert payload["service"] == "flask-elastic-backend"
+    assert "/api/logs" in payload["endpoints"]
 
 
-def test_clear_filters_removes_session_filters(flask_client):
-    flask_client.post("/", data={"program": "systemd", "message": "sshd"})
+def test_api_options_returns_filter_options(flask_client):
+    response = flask_client.get("/api/options")
 
-    response = flask_client.get("/clear")
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/"
-
-    response = flask_client.get("/")
-    html = response.get_data(as_text=True)
-    assert 'value="systemd"' not in html
-    assert 'value="sshd"' not in html
-    assert "2026/06/02 20:11:55 JST" not in html
-    assert "検索を実施してください" in html
-
-
-def test_empty_post_search_runs_all_logs_once_then_reload_resets(flask_client, fake_client):
-    response = flask_client.post("/", data={})
-
-    assert response.status_code == 302
-
-    response = flask_client.get("/")
-    html = response.get_data(as_text=True)
-    assert "1 件" in html
-    assert "2026/06/02 20:11:55 JST" in html
-    assert fake_client.search_calls[-1]["query"] == {"match_all": {}}
-
-    response = flask_client.get("/")
-    html = response.get_data(as_text=True)
-    assert "検索を実施してください" in html
-    assert "2026/06/02 20:11:55 JST" not in html
+    assert response.status_code == 200
+    assert response.get_json() == {"log_types": ["syslog", "authlog"]}
 
 
 def test_post_api_logs_accepts_json(flask_client):

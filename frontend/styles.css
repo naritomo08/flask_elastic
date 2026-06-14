@@ -90,7 +90,6 @@ h1 {
 
 input[type="search"],
 input[type="datetime-local"],
-input[type="time"],
 select {
   min-width: 0;
   border: 1px solid #ccd4e0;
@@ -100,7 +99,6 @@ select {
   color: #172033;
 }
 
-a.reset-link,
 button.reset-link {
   display: inline-flex;
   align-items: center;
@@ -113,7 +111,6 @@ button.reset-link {
   text-decoration: none;
 }
 
-a.reset-link:hover,
 button.reset-link:hover {
   background: transparent;
   text-decoration: underline;
@@ -242,8 +239,7 @@ th {
     justify-content: stretch;
   }
 
-  .search-actions button,
-  .search-actions .reset-link {
+  .search-actions button {
     flex: 1;
     justify-content: center;
   }

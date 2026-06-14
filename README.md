@@ -1,6 +1,6 @@
 # flask_elastic
 
-既存の Elasticsearch に保存したログを Flask からキーワード検索するアプリです。
+既存の Elasticsearch に保存したログを、静的フロントエンドと Flask API バックエンドで検索するアプリです。
 Elasticsearch は以下の記事の構成で作成済みのものを利用します。
 
 https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
@@ -16,17 +16,22 @@ https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
 docker compose up --build
 ```
 
-ブラウザで http://localhost:5001 を開きます。
+ブラウザで http://localhost:8080 を開きます。
 
-Flask アプリだけを Docker で起動します。Elasticsearch / Kibana はこの Compose には含めません。
-画面検索は POST 後に GET へリダイレクトするため、リロードしてもフォーム再送信は発生しません。
+Compose では以下の2コンテナを起動します。
+
+- `frontend`: nginx で `frontend/` の HTML / CSS / JS を配信します
+- `backend`: Flask / gunicorn で JSON API を提供します
+
+Elasticsearch / Kibana はこの Compose には含めません。
+フロントエンドは `/api/...` を呼び、nginx が `backend:5000` へプロキシします。
 
 ## API
 
 ログ検索:
 
 ```bash
-curl -X POST http://localhost:5001/api/logs \
+curl -X POST http://localhost:8080/api/logs \
   -H "Content-Type: application/json" \
   -d '{
     "message":"timeout",
@@ -37,7 +42,13 @@ curl -X POST http://localhost:5001/api/logs \
 ヘルスチェック:
 
 ```bash
-curl http://localhost:5001/health
+curl http://localhost:8080/health
+```
+
+バックエンドを直接確認する場合:
+
+```bash
+curl http://localhost:5001/api/options
 ```
 
 ## テスト
@@ -49,7 +60,7 @@ pytest でアプリの主要処理を確認できます。
 
 ```bash
 docker compose build
-docker compose run --rm web pytest
+docker compose run --rm backend pytest
 ```
 
 確認している内容:
@@ -57,7 +68,7 @@ docker compose run --rm web pytest
 - JST の時刻表示変換
 - 検索条件から Elasticsearch クエリを組み立てる処理
 - `syslog` / `authlog` のログ種別判定
-- `POST /` による画面検索
+- `GET /api/options` による検索条件取得
 - `POST /api/logs` による JSON API 検索
 - 検索結果の表示用フィールド作成
 
@@ -67,7 +78,6 @@ docker compose run --rm web pytest
 
 - `ELASTICSEARCH_URL`: Elasticsearch の URL
 - `ELASTICSEARCH_INDEX`: 検索対象のインデックスパターン
-- `FLASK_SECRET_KEY`: 画面検索条件をセッションに保存するための秘密鍵
 
 例:
 
@@ -75,7 +85,6 @@ docker compose run --rm web pytest
 environment:
   ELASTICSEARCH_URL: http://elastic1:9200
   ELASTICSEARCH_INDEX: logs-syslog-*
-  FLASK_SECRET_KEY: change-me
 extra_hosts:
   - "elastic1:192.168.11.20"
 ```

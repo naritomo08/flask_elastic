@@ -1,25 +1,18 @@
 const searchForm = document.getElementById("search-form");
 const resultsSummary = document.getElementById("results-summary");
+const logTypeSelect = document.getElementById("log-type");
 let resultsBody = document.getElementById("results-body");
 
-if (searchForm && resultsSummary && resultsBody) {
-  const submitsToApi = new URL(
-    searchForm.getAttribute("action") || window.location.href,
-    window.location.href
-  ).pathname === "/api/logs";
+loadOptions();
 
+if (searchForm && resultsSummary && resultsBody) {
   searchForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
     setSummary("検索中");
     replaceResultsBody(emptyMessage("検索中", "empty searching"));
 
-    if (!submitsToApi) {
-      return;
-    }
-
-    event.preventDefault();
-
     try {
-      const response = await fetch("/api/logs", {
+      const response = await fetch(searchForm.action, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -41,15 +34,38 @@ if (searchForm && resultsSummary && resultsBody) {
   });
 
   searchForm.addEventListener("reset", () => {
-    if (!submitsToApi) {
-      return;
-    }
-
     window.setTimeout(() => {
       setSummary("検索を実施してください");
       replaceResultsBody(emptyMessage("検索条件を入力して検索ボタンを押してください。"));
     }, 0);
   });
+}
+
+async function loadOptions() {
+  if (!logTypeSelect) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/options", {
+      headers: {
+        "Accept": "application/json"
+      }
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "検索条件の取得に失敗しました。");
+    }
+
+    (payload.log_types || []).forEach((logType) => {
+      const option = document.createElement("option");
+      option.value = logType;
+      option.textContent = logType;
+      logTypeSelect.append(option);
+    });
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function formPayload(form) {

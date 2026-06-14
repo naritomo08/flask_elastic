@@ -1,9 +1,19 @@
 services:
-  web:
-    build: .
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
     ports:
       - "5001:5000"
     restart: unless-stopped
+    volumes:
+      - ./tests:/app/tests:ro
     environment:
       ELASTICSEARCH_URL: http://elastic1:9200
       ELASTICSEARCH_INDEX: logs-*
