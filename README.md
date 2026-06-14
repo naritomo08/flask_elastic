@@ -48,7 +48,7 @@ curl http://localhost:8080/health
 バックエンドを直接確認する場合:
 
 ```bash
-curl http://localhost:5001/api/options
+curl http://localhost:5005/api/options
 ```
 
 ## テスト
