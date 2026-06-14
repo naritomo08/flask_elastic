@@ -1,6 +1,6 @@
 # flask_elastic
 
-既存の Elasticsearch に保存したログを Flask からキーワード検索するアプリです。
+既存の Elasticsearch に保存したログを Ruby / Sinatra のWebアプリからキーワード検索するアプリです。
 Elasticsearch は以下の記事の構成で作成済みのものを利用します。
 
 https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
@@ -18,8 +18,8 @@ docker compose up --build
 
 ブラウザで http://localhost:5001 を開きます。
 
-Flask アプリだけを Docker で起動します。Elasticsearch / Kibana はこの Compose には含めません。
-画面検索は POST 後に GET へリダイレクトするため、リロードしてもフォーム再送信は発生しません。
+Ruby / Sinatra アプリだけを Docker で起動します。Elasticsearch / Kibana はこの Compose には含めません。
+画面検索は `/api/logs` を呼び出すため、リロードしてもフォーム再送信は発生しません。
 
 ## API
 
@@ -42,14 +42,13 @@ curl http://localhost:5001/health
 
 ## テスト
 
-pytest でアプリの主要処理を確認できます。
+Minitest でアプリの主要処理を確認できます。
 テストでは Elasticsearch に実接続せず、Fake クライアントを使います。
 
 実行方法:
 
 ```bash
-docker compose build
-docker compose run --rm web pytest
+bundle exec ruby test_app.rb
 ```
 
 確認している内容:
@@ -67,7 +66,7 @@ docker compose run --rm web pytest
 
 - `ELASTICSEARCH_URL`: Elasticsearch の URL
 - `ELASTICSEARCH_INDEX`: 検索対象のインデックスパターン
-- `FLASK_SECRET_KEY`: 画面検索条件をセッションに保存するための秘密鍵
+- `ELASTICSEARCH_LIMIT`: 検索結果の最大表示件数
 
 例:
 
@@ -75,15 +74,15 @@ docker compose run --rm web pytest
 environment:
   ELASTICSEARCH_URL: http://elastic1:9200
   ELASTICSEARCH_INDEX: logs-syslog-*
-  FLASK_SECRET_KEY: change-me
+  ELASTICSEARCH_LIMIT: "50"
 extra_hosts:
   - "elastic1:192.168.11.20"
 ```
 
 ## 他言語版
 
-本サイトは Python / Flask 版です。
-ブランチを切り替えれば Go / Java / PHP / Ruby 版にもなります。
+本サイトは Ruby / Sinatra 版です。
+ブランチを切り替えれば Go / Java / PHP / Python 版にもなります。
 
 ブランチ名がそのままその言語版になります。
 
