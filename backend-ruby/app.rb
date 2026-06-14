@@ -61,19 +61,11 @@ class LogSearchApp < Sinatra::Base
   LOG_TYPES = %w[syslog authlog].freeze
   JST_OFFSET = "+09:00"
 
-  configure do
-    set :public_folder, File.expand_path("static", __dir__)
-  end
-
   get "/" do
     json_response(
       service: "ruby-elastic-backend",
       endpoints: ["/health", "/api/options", "/api/logs"]
     )
-  end
-
-  post "/" do
-    redirect "/"
   end
 
   get "/health" do
@@ -108,7 +100,7 @@ class LogSearchApp < Sinatra::Base
     logs = search_logs(client, filters)
     json_response(filters: filters, count: logs.length, logs: logs)
   rescue StandardError => e
-    status 500
+    status 502
     json_response(error: e.message)
   end
 

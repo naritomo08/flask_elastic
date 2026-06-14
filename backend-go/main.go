@@ -3,21 +3,16 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"math"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -30,9 +25,7 @@ var (
 )
 
 type App struct {
-	client   ElasticSearcher
-	template *template.Template
-	sessions *SessionStore
+	client ElasticSearcher
 }
 
 type ElasticSearcher interface {
@@ -55,22 +48,6 @@ type Filters struct {
 }
 
 type LogRecord map[string]any
-
-type PageData struct {
-	Filters  Filters
-	Logs     []LogRecord
-	LogTypes []string
-	Searched bool
-}
-
-type PendingSearch struct {
-	Filters Filters
-}
-
-type SessionStore struct {
-	mu    sync.Mutex
-	items map[string]PendingSearch
-}
 
 type ElasticHit struct {
 	ID     string         `json:"_id"`
@@ -104,11 +81,7 @@ func main() {
 
 func NewApp(client ElasticSearcher) (*App, error) {
 	return &App{
-		client:   client,
-		template: nil,
-		sessions: &SessionStore{
-			items: map[string]PendingSearch{},
-		},
+		client: client,
 	}, nil
 }
 
@@ -204,69 +177,6 @@ func (c *ElasticClient) Search(ctx context.Context, index string, query map[stri
 		return nil, fmt.Errorf("elasticsearch search failed: %v", decoded.Error)
 	}
 	return decoded.Hits.Hits, nil
-}
-
-func (a *App) index(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-	case http.MethodPost:
-		filters, err := filtersFromRequest(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		a.sessions.Save(w, r, filters)
-		http.Redirect(w, r, "/", http.StatusFound)
-		return
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var filters Filters
-	searched := false
-	if r.URL.RawQuery != "" {
-		filters = filtersFromValues(r.URL.Query())
-		searched = true
-	} else if pending, ok := a.sessions.Pop(w, r); ok {
-		filters = pending.Filters
-		searched = true
-	} else {
-		filters = normalizeFilters(Filters{})
-	}
-
-	var logs []LogRecord
-	if searched {
-		var err error
-		logs, err = searchLogs(r.Context(), a.client, filters)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-	}
-
-	data := PageData{
-		Filters:  filters,
-		Logs:     logs,
-		LogTypes: logTypes,
-		Searched: searched,
-	}
-	var rendered bytes.Buffer
-	if err := a.template.Execute(&rendered, data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(rendered.Bytes())
-}
-
-func (a *App) clearFilters(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	a.sessions.Clear(w, r)
-	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (a *App) health(w http.ResponseWriter, r *http.Request) {
@@ -501,42 +411,6 @@ func datetimeLocalToISO(value string) string {
 	return parsed.In(time.UTC).Format("2006-01-02T15:04:05-07:00")
 }
 
-func timeBound(value, direction string, now time.Time) string {
-	targetDate := now.In(jst).Format("2006-01-02")
-	if value == "" {
-		if direction == "from" {
-			return targetDate + " 00:00:00"
-		}
-		return targetDate + " 23:59:59"
-	}
-
-	normalized := strings.TrimSpace(value)
-	if strings.Contains(normalized, "T") {
-		if parsed, err := parseISOTime(normalized); err == nil {
-			if parsed.Location() != time.Local {
-				parsed = parsed.In(jst)
-			}
-			return parsed.Format("2006-01-02 15:04:05")
-		}
-	}
-
-	if parsed, err := time.Parse("15:04:05", addSeconds(normalized)); err == nil {
-		return targetDate + " " + parsed.Format("15:04:05")
-	}
-
-	if direction == "from" {
-		return targetDate + " 00:00:00"
-	}
-	return targetDate + " 23:59:59"
-}
-
-func addSeconds(value string) string {
-	if len(strings.Split(value, ":")) == 2 {
-		return value + ":00"
-	}
-	return value
-}
-
 func parseISOTime(value string) (time.Time, error) {
 	zonedLayouts := []string{
 		time.RFC3339Nano,
@@ -612,72 +486,6 @@ func formatTimestampString(value string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func (s *SessionStore) Save(w http.ResponseWriter, r *http.Request, filters Filters) {
-	id := sessionID(r)
-	if id == "" {
-		id = randomID()
-		http.SetCookie(w, &http.Cookie{
-			Name:     "session_id",
-			Value:    id,
-			Path:     "/",
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		})
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.items[id] = PendingSearch{Filters: filters}
-}
-
-func (s *SessionStore) Pop(w http.ResponseWriter, r *http.Request) (PendingSearch, bool) {
-	id := sessionID(r)
-	if id == "" {
-		return PendingSearch{}, false
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	pending, ok := s.items[id]
-	if ok {
-		delete(s.items, id)
-	}
-	return pending, ok
-}
-
-func (s *SessionStore) Clear(w http.ResponseWriter, r *http.Request) {
-	id := sessionID(r)
-	if id != "" {
-		s.mu.Lock()
-		delete(s.items, id)
-		s.mu.Unlock()
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "session_id",
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func sessionID(r *http.Request) string {
-	cookie, err := r.Cookie("session_id")
-	if err != nil {
-		return ""
-	}
-	return cookie.Value
-}
-
-func randomID() string {
-	buf := make([]byte, 24)
-	if _, err := rand.Read(buf); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
-	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

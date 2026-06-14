@@ -11,7 +11,6 @@ WORKDIR /app
 COPY --from=build /src/target/flask-elastic-1.0.0.jar /app/flask-elastic.jar
 
 ENV PORT=5000
-ENV STATIC_DIR=/app/static
 
 EXPOSE 5000
 
