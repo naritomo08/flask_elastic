@@ -162,6 +162,9 @@ function elasticsearch_request(string $method, string $url, ?array $body = null,
     if ($body !== null) {
         $options[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
+    if ($method === 'HEAD') {
+        $options[CURLOPT_NOBODY] = true;
+    }
 
     curl_setopt_array($curl, $options);
     $response = curl_exec($curl);

@@ -65,6 +65,15 @@ curl -X POST http://localhost:8080/api/go/logs \
 ヘルスチェック:
 
 ```bash
+curl http://localhost:8080/health
+```
+
+`/health` は全 backend の `/health` を確認する疎通確認ページです。
+各カードの Elasticsearch 状態は、それぞれの backend から Elasticsearch へ ping した結果です。
+
+backend を直接確認する場合:
+
+```bash
 curl http://localhost:5005/health
 ```
 

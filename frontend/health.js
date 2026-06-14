@@ -1,0 +1,87 @@
+const backends = [
+  { id: "flask", label: "Python / Flask" },
+  { id: "go", label: "Go" },
+  { id: "java", label: "Java" },
+  { id: "php", label: "PHP" },
+  { id: "ruby", label: "Ruby" },
+  { id: "elixir", label: "Elixir" }
+];
+
+const healthSummary = document.getElementById("health-summary");
+const healthBody = document.getElementById("health-body");
+const refreshButton = document.getElementById("refresh-health");
+
+refreshButton?.addEventListener("click", loadHealth);
+loadHealth();
+
+async function loadHealth() {
+  setHealthSummary("確認中");
+  healthBody.replaceChildren(...backends.map((backend) => healthCard(backend, { state: "checking" })));
+
+  const results = await Promise.all(backends.map(checkBackend));
+  const okCount = results.filter((result) => result.ok).length;
+  setHealthSummary(`${okCount} / ${results.length} backend OK`, new Date().toLocaleString());
+  healthBody.replaceChildren(...results.map((result) => healthCard(result.backend, result)));
+}
+
+async function checkBackend(backend) {
+  try {
+    const response = await fetch(`/health/${backend.id}`, {
+      headers: {
+        "Accept": "application/json"
+      }
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    return { backend, ok: payload.ok === true, payload };
+  } catch (error) {
+    return { backend, ok: false, error: error.message || "connection failed" };
+  }
+}
+
+function setHealthSummary(...items) {
+  healthSummary.replaceChildren(...items.map((item) => {
+    const span = document.createElement("span");
+    span.textContent = item;
+    return span;
+  }));
+}
+
+function healthCard(backend, result) {
+  const article = document.createElement("article");
+  article.className = `health-card ${result.ok ? "is-ok" : "is-error"}`;
+
+  const header = document.createElement("div");
+  header.className = "health-card-header";
+
+  const title = document.createElement("h2");
+  title.textContent = backend.label;
+
+  const status = document.createElement("span");
+  status.className = "health-status";
+  status.textContent = result.state === "checking" ? "Checking" : result.ok ? "OK" : "NG";
+
+  header.append(title, status);
+
+  const details = document.createElement("dl");
+  appendDetail(details, "Backend", result.state === "checking" ? "確認中" : result.error ? "接続失敗" : "接続成功");
+  appendDetail(details, "Elasticsearch", result.state === "checking" ? "確認中" : result.ok ? "接続成功" : "接続失敗");
+  appendDetail(details, "URL", result.payload?.elasticsearch_url || "-");
+  appendDetail(details, "Index", result.payload?.index || "-");
+  if (result.error) {
+    appendDetail(details, "Error", result.error);
+  }
+
+  article.append(header, details);
+  return article;
+}
+
+function appendDetail(list, label, value) {
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const description = document.createElement("dd");
+  description.textContent = value;
+  list.append(term, description);
+}
