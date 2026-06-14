@@ -9,19 +9,33 @@ const backends = [
 
 const healthSummary = document.getElementById("health-summary");
 const healthBody = document.getElementById("health-body");
-const refreshButton = document.getElementById("refresh-health");
+const refreshIntervalMs = 10000;
+let hasRenderedHealth = false;
+let isLoadingHealth = false;
 
-refreshButton?.addEventListener("click", loadHealth);
 loadHealth();
+window.setInterval(loadHealth, refreshIntervalMs);
 
 async function loadHealth() {
-  setHealthSummary("確認中");
-  healthBody.replaceChildren(...backends.map((backend) => healthCard(backend, { state: "checking" })));
+  if (isLoadingHealth) {
+    return;
+  }
 
-  const results = await Promise.all(backends.map(checkBackend));
-  const okCount = results.filter((result) => result.ok).length;
-  setHealthSummary(`${okCount} / ${results.length} backend OK`, new Date().toLocaleString());
-  healthBody.replaceChildren(...results.map((result) => healthCard(result.backend, result)));
+  isLoadingHealth = true;
+  if (!hasRenderedHealth) {
+    setHealthSummary("確認中");
+    healthBody.replaceChildren(...backends.map((backend) => healthCard(backend, { state: "checking" })));
+  }
+
+  try {
+    const results = await Promise.all(backends.map(checkBackend));
+    const okCount = results.filter((result) => result.ok).length;
+    setHealthSummary(`${okCount} / ${results.length} backend OK`, new Date().toLocaleString());
+    healthBody.replaceChildren(...results.map((result) => healthCard(result.backend, result)));
+    hasRenderedHealth = true;
+  } finally {
+    isLoadingHealth = false;
+  }
 }
 
 async function checkBackend(backend) {
