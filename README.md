@@ -65,7 +65,7 @@ curl -X POST http://localhost:8080/api/go/logs \
 ヘルスチェック:
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:5005/health
 ```
 
 追加 backend を直接確認する場合:
