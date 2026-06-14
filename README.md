@@ -1,6 +1,6 @@
 # flask_elastic
 
-既存の Elasticsearch に保存したログを Flask からキーワード検索するアプリです。
+既存の Elasticsearch に保存したログを Go のWebアプリからキーワード検索するアプリです。
 Elasticsearch は以下の記事の構成で作成済みのものを利用します。
 
 https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
@@ -18,7 +18,7 @@ docker compose up --build
 
 ブラウザで http://localhost:5001 を開きます。
 
-Flask アプリだけを Docker で起動します。Elasticsearch / Kibana はこの Compose には含めません。
+Go アプリだけを Docker で起動します。Elasticsearch / Kibana はこの Compose には含めません。
 画面検索は POST 後に GET へリダイレクトするため、リロードしてもフォーム再送信は発生しません。
 
 ## API
@@ -42,14 +42,13 @@ curl http://localhost:5001/health
 
 ## テスト
 
-pytest でアプリの主要処理を確認できます。
+Go のテストでアプリの主要処理を確認できます。
 テストでは Elasticsearch に実接続せず、Fake クライアントを使います。
 
 実行方法:
 
 ```bash
-docker compose build
-docker compose run --rm web pytest
+go test ./...
 ```
 
 確認している内容:
@@ -82,8 +81,8 @@ extra_hosts:
 
 ## 他言語版
 
-本サイトは Python / Flask 版です。
-ブランチを切り替えれば Go / Java / PHP / Ruby 版にもなります。
+本サイトは Go 版です。
+ブランチを切り替えれば PHP / Java / Ruby 版にもなります。
 
 ブランチ名がそのままその言語版になります。
 
