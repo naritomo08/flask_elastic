@@ -9,6 +9,7 @@ services:
       - backend-java
       - backend-php
       - backend-ruby
+      - backend-elixir
     restart: unless-stopped
 
   backend:
@@ -66,6 +67,17 @@ services:
     extra_hosts:
       - "elastic1:192.168.11.20"
 
+  backend-elixir:
+    build: ./backend-elixir
+    ports:
+      - "5010:5000"
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_URL: http://elastic1:9200
+      ELASTICSEARCH_INDEX: logs-*
+    extra_hosts:
+      - "elastic1:192.168.11.20"
+
   backend-contract-tests:
     build: ./backend
     profiles:
@@ -76,9 +88,10 @@ services:
       - backend-java
       - backend-php
       - backend-ruby
+      - backend-elixir
     volumes:
       - ./tests:/app/tests:ro
     environment:
-      BACKEND_TARGETS: flask=http://backend:5000,go=http://backend-go:5000,java=http://backend-java:5000,php=http://backend-php:80,ruby=http://backend-ruby:5000
+      BACKEND_TARGETS: flask=http://backend:5000,go=http://backend-go:5000,java=http://backend-java:5000,php=http://backend-php:80,ruby=http://backend-ruby:5000,elixir=http://backend-elixir:5000
       RUN_SEARCH_CONTRACT_TESTS: ${RUN_SEARCH_CONTRACT_TESTS:-0}
     command: ["pytest", "/app/tests"]

@@ -26,6 +26,7 @@ Compose では以下のコンテナを起動します。
 - `backend-java`: Java で JSON API を提供します
 - `backend-php`: PHP / Slim で JSON API を提供します
 - `backend-ruby`: Ruby / Sinatra で JSON API を提供します
+- `backend-elixir`: Elixir / Plug.Cowboy で JSON API を提供します
 
 Elasticsearch / Kibana はこの Compose には含めません。
 フロントエンドは言語選択に応じて `/api/flask/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。
@@ -38,6 +39,7 @@ Elasticsearch / Kibana はこの Compose には含めません。
 - `backend-java`: http://localhost:5007
 - `backend-php`: http://localhost:5008
 - `backend-ruby`: http://localhost:5009
+- `backend-elixir`: http://localhost:5010
 
 ## API
 
@@ -117,5 +119,5 @@ extra_hosts:
 
 ## 他言語版
 
-フロントエンドの `Backend` セレクトから Flask / Go / Java / PHP / Ruby を切り替えられます。
+フロントエンドの `Backend` セレクトから Flask / Go / Java / PHP / Ruby / Elixir を切り替えられます。
 各 backend は同じ API 契約を実装しているため、言語比較やパフォーマンス比較にも利用できます。
