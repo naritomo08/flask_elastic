@@ -1,11 +1,11 @@
 const searchForm = document.getElementById("search-form");
 const resultsSummary = document.getElementById("results-summary");
 const summaryText = document.getElementById("summary-text");
-const downloadCsvButton = document.getElementById("download-csv");
 const logTypeSelect = document.getElementById("log-type");
 const backendLanguageSelect = document.getElementById("backend-language");
 let resultsBody = document.getElementById("results-body");
 let currentLogs = [];
+let downloadCsvButton = null;
 
 loadOptions();
 
@@ -58,9 +58,6 @@ if (searchForm && resultsSummary && resultsBody) {
     replaceResultsBody(emptyMessage("検索条件を入力して検索ボタンを押してください。"));
   });
 
-  downloadCsvButton?.addEventListener("click", () => {
-    downloadCsv(currentLogs);
-  });
 }
 
 async function loadOptions() {
@@ -188,11 +185,25 @@ function appendCell(row, value) {
 }
 
 function updateDownloadButton() {
-  if (!downloadCsvButton) {
+  if (currentLogs.length === 0) {
+    downloadCsvButton?.remove();
+    downloadCsvButton = null;
     return;
   }
 
-  downloadCsvButton.hidden = currentLogs.length === 0;
+  if (downloadCsvButton) {
+    return;
+  }
+
+  downloadCsvButton = document.createElement("button");
+  downloadCsvButton.id = "download-csv";
+  downloadCsvButton.className = "download-button";
+  downloadCsvButton.type = "button";
+  downloadCsvButton.textContent = "CSVダウンロード";
+  downloadCsvButton.addEventListener("click", () => {
+    downloadCsv(currentLogs);
+  });
+  resultsSummary.append(downloadCsvButton);
 }
 
 function downloadCsv(logs) {
