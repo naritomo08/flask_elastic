@@ -192,8 +192,7 @@ function updateDownloadButton() {
     return;
   }
 
-  downloadCsvButton.disabled = currentLogs.length === 0;
-  downloadCsvButton.textContent = currentLogs.length === 0 ? "CSV" : "CSVダウンロード";
+  downloadCsvButton.hidden = currentLogs.length === 0;
 }
 
 function downloadCsv(logs) {

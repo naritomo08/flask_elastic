@@ -175,15 +175,6 @@ button:hover {
   font-size: 13px;
 }
 
-button:disabled {
-  cursor: not-allowed;
-  background: #b8c2d0;
-}
-
-button:disabled:hover {
-  background: #b8c2d0;
-}
-
 .table-wrap {
   overflow-x: auto;
 }
