@@ -153,12 +153,35 @@ button:hover {
 
 .summary {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 16px 18px;
   border-bottom: 1px solid #e0e6ef;
   color: #59657a;
   font-weight: 700;
+}
+
+.summary-text {
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+.download-button {
+  flex: none;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  background: #b8c2d0;
+}
+
+button:disabled:hover {
+  background: #b8c2d0;
 }
 
 .table-wrap {
@@ -309,6 +332,11 @@ th {
   .summary {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .summary-text {
+    flex-direction: column;
+    gap: 6px;
   }
 
   .search {

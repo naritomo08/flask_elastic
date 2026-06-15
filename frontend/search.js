@@ -1,14 +1,19 @@
 const searchForm = document.getElementById("search-form");
 const resultsSummary = document.getElementById("results-summary");
+const summaryText = document.getElementById("summary-text");
+const downloadCsvButton = document.getElementById("download-csv");
 const logTypeSelect = document.getElementById("log-type");
 const backendLanguageSelect = document.getElementById("backend-language");
 let resultsBody = document.getElementById("results-body");
+let currentLogs = [];
 
 loadOptions();
 
 if (searchForm && resultsSummary && resultsBody) {
   searchForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    currentLogs = [];
+    updateDownloadButton();
     setSummary("検索中");
     replaceResultsBody(emptyMessage("検索中", "empty searching"));
 
@@ -29,6 +34,8 @@ if (searchForm && resultsSummary && resultsBody) {
 
       renderResults(payload.logs || []);
     } catch (error) {
+      currentLogs = [];
+      updateDownloadButton();
       setSummary("検索に失敗しました");
       replaceResultsBody(emptyMessage(error.message || "検索に失敗しました。", "empty error"));
     }
@@ -36,15 +43,23 @@ if (searchForm && resultsSummary && resultsBody) {
 
   searchForm.addEventListener("reset", () => {
     window.setTimeout(() => {
+      currentLogs = [];
+      updateDownloadButton();
       setSummary("検索を実施してください");
       replaceResultsBody(emptyMessage("検索条件を入力して検索ボタンを押してください。"));
     }, 0);
   });
 
   backendLanguageSelect?.addEventListener("change", () => {
+    currentLogs = [];
+    updateDownloadButton();
     loadOptions();
     setSummary(`${selectedBackendLabel()} backend を選択中`);
     replaceResultsBody(emptyMessage("検索条件を入力して検索ボタンを押してください。"));
+  });
+
+  downloadCsvButton?.addEventListener("click", () => {
+    downloadCsv(currentLogs);
   });
 }
 
@@ -105,7 +120,8 @@ async function readJsonResponse(response) {
 }
 
 function setSummary(...items) {
-  resultsSummary.replaceChildren(...items.map((item) => {
+  const target = summaryText || resultsSummary;
+  target.replaceChildren(...items.map((item) => {
     const span = document.createElement("span");
     span.textContent = item;
     return span;
@@ -126,6 +142,8 @@ function replaceResultsBody(element) {
 }
 
 function renderResults(logs) {
+  currentLogs = logs;
+  updateDownloadButton();
   setSummary(`${logs.length} 件`, "最新50件のみ表示");
 
   if (logs.length === 0) {
@@ -167,6 +185,61 @@ function appendCell(row, value) {
   const cell = document.createElement("td");
   cell.textContent = value;
   row.append(cell);
+}
+
+function updateDownloadButton() {
+  if (!downloadCsvButton) {
+    return;
+  }
+
+  downloadCsvButton.disabled = currentLogs.length === 0;
+  downloadCsvButton.textContent = currentLogs.length === 0 ? "CSV" : "CSVダウンロード";
+}
+
+function downloadCsv(logs) {
+  if (logs.length === 0) {
+    return;
+  }
+
+  const headers = [
+    ["display_time", "Time"],
+    ["log_type", "Log"],
+    ["host", "Host"],
+    ["program", "Program"],
+    ["msg", "Message"]
+  ];
+  const rows = [
+    headers.map(([, label]) => label),
+    ...logs.map((log) => headers.map(([key]) => log[key] || ""))
+  ];
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([`\uFEFF${csv}\r\n`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `logs-${timestampForFilename()}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll("\"", "\"\"")}"`;
+}
+
+function timestampForFilename() {
+  const date = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join("");
 }
 
 function appendLogTypeCell(row, value) {
