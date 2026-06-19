@@ -37,6 +37,13 @@ function filters_from_request(Request $request): array
     return normalize_filters($request->getQueryParams());
 }
 
+function positive_int(mixed $value, int $default, ?int $maximum = null): int
+{
+    $parsed = filter_var($value, FILTER_VALIDATE_INT);
+    $parsed = $parsed !== false && $parsed > 0 ? $parsed : $default;
+    return $maximum === null ? $parsed : min($parsed, $maximum);
+}
+
 function json_response(Response $response, array $payload, int $status = 200): Response
 {
     $response->getBody()->write(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -61,11 +68,7 @@ function create_app(): \Slim\App
     });
 
     $app->get('/health', function (Request $request, Response $response) use ($config): Response {
-        return json_response($response, [
-            'ok' => elasticsearch_ping($config),
-            'elasticsearch_url' => $config['elasticsearch_url'],
-            'index' => $config['elasticsearch_index'],
-        ]);
+        return json_response($response, elasticsearch_health($config));
     });
 
     $app->get('/api/options', function (Request $request, Response $response): Response {
@@ -74,9 +77,16 @@ function create_app(): \Slim\App
 
     $app->map(['GET', 'POST'], '/api/logs', function (Request $request, Response $response) use ($config): Response {
         $filters = filters_from_request($request);
+        $params = array_merge($request->getQueryParams(), is_array($request->getParsedBody()) ? $request->getParsedBody() : []);
+        $page = positive_int($params['page'] ?? null, 1);
+        $size = positive_int($params['size'] ?? null, 20, 100);
         try {
-            $logs = search_logs($filters, $config);
-            return json_response($response, ['filters' => $filters, 'count' => count($logs), 'logs' => $logs]);
+            $result = search_logs($filters, $config, $page, $size);
+            return json_response($response, array_merge([
+                'filters' => $filters,
+                'count' => count($result['results']),
+                'logs' => $result['results'],
+            ], $result));
         } catch (Throwable $error) {
             return json_response($response, ['error' => $error->getMessage()], 502);
         }

@@ -13,14 +13,37 @@ defmodule ElixirElastic.ElasticSearch do
     end
   end
 
-  def search_logs(filters) do
+  def health do
+    started_at = System.monotonic_time(:millisecond)
+
+    case Req.get(elasticsearch_url(), receive_timeout: 3_000) do
+      {:ok, %{status: status, body: body}} when status in 200..399 ->
+        %{
+          ok: true,
+          status: "ok",
+          backend: "elixir",
+          latency_ms: System.monotonic_time(:millisecond) - started_at,
+          cluster_name: Map.get(body, "cluster_name", ""),
+          version: get_in(body, ["version", "number"]) || ""
+        }
+
+      {:ok, %{status: status}} ->
+        %{ok: false, status: "error", backend: "elixir", latency_ms: System.monotonic_time(:millisecond) - started_at, error: "HTTP #{status}"}
+
+      {:error, reason} ->
+        %{ok: false, status: "error", backend: "elixir", latency_ms: System.monotonic_time(:millisecond) - started_at, error: inspect(reason)}
+    end
+  end
+
+  def search_logs(filters, page \\ 1, size \\ 20) do
     index = index_pattern_for_log_type(filters["log_type"])
 
     body = %{
       query: build_query(filters),
       sort: [%{"@timestamp" => %{order: "desc", unmapped_type: "date"}}],
-      size: 50,
-      track_total_hits: false,
+      from: (page - 1) * size,
+      size: size,
+      track_total_hits: true,
       timeout: "5s",
       _source: ["@timestamp", "host", "program", "msg", "severity", "dt", "hr"]
     }
@@ -29,11 +52,17 @@ defmodule ElixirElastic.ElasticSearch do
 
     case Req.post(url, json: body, params: [ignore_unavailable: true], receive_timeout: 10_000) do
       {:ok, %{status: status, body: response}} when status in 200..299 ->
-        response
-        |> get_in(["hits", "hits"])
-        |> Kernel.||([])
-        |> Enum.map(&format_hit/1)
-        |> Enum.filter(&matches_exact_filters?(&1, filters))
+        total_value = get_in(response, ["hits", "total"]) || 0
+        total = if is_map(total_value), do: Map.get(total_value, "value", 0), else: total_value
+
+        results =
+          response
+          |> get_in(["hits", "hits"])
+          |> Kernel.||([])
+          |> Enum.map(&format_hit/1)
+          |> Enum.filter(&matches_exact_filters?(&1, filters))
+
+        %{total: total, page: page, size: size, results: results}
 
       {:ok, %{status: status, body: response}} ->
         raise "Elasticsearch search failed with status #{status}: #{inspect(response)}"

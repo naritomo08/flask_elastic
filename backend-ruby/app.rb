@@ -17,7 +17,30 @@ class ElasticsearchClient
     false
   end
 
-  def search(index:, query:, timeout: 15, size: LogSearchApp::DEFAULT_LIMIT)
+  def health
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    uri = URI(@base_url)
+    response = request(Net::HTTP::Get.new(uri), uri, timeout: 3)
+    payload = JSON.parse(response.body)
+    {
+      ok: true,
+      status: "ok",
+      backend: "ruby",
+      latency_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round,
+      cluster_name: payload["cluster_name"].to_s,
+      version: payload.dig("version", "number").to_s
+    }
+  rescue StandardError => e
+    {
+      ok: false,
+      status: "error",
+      backend: "ruby",
+      latency_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round,
+      error: e.message
+    }
+  end
+
+  def search(index:, query:, timeout: 15, page: 1, size: 20)
     uri = URI("#{@base_url}/#{index.to_s.gsub(%r{\A/+|/+\z}, "")}/_search")
     uri.query = URI.encode_www_form(ignore_unavailable: "true")
     http_request = Net::HTTP::Post.new(uri)
@@ -25,8 +48,9 @@ class ElasticsearchClient
     http_request.body = JSON.generate(
       query: query,
       sort: [{ "@timestamp" => { order: "desc", unmapped_type: "date" } }],
+      from: (page - 1) * size,
       size: size,
-      track_total_hits: false,
+      track_total_hits: true,
       timeout: "5s",
       _source: ["@timestamp", "host", "program", "msg", "severity", "dt", "hr"]
     )
@@ -36,7 +60,11 @@ class ElasticsearchClient
     if body["error"]
       raise "Elasticsearch search failed: #{body["error"]}"
     end
-    body.dig("hits", "hits") || []
+    total_value = body.dig("hits", "total") || 0
+    {
+      "total" => total_value.is_a?(Hash) ? total_value.fetch("value", 0).to_i : total_value.to_i,
+      "hits" => body.dig("hits", "hits") || []
+    }
   end
 
   private
@@ -69,11 +97,10 @@ class LogSearchApp < Sinatra::Base
   end
 
   get "/health" do
-    json_response(
-      ok: client.ping,
+    json_response(client.health.merge(
       elasticsearch_url: ELASTICSEARCH_URL,
       index: ELASTICSEARCH_INDEX
-    )
+    ))
   end
 
   get "/api/options" do
@@ -97,11 +124,29 @@ class LogSearchApp < Sinatra::Base
   end
 
   def api_search_logs(filters)
-    logs = search_logs(client, filters)
-    json_response(filters: filters, count: logs.length, logs: logs)
+    page = positive_int(params["page"], 1)
+    size = positive_int(params["size"], 20, 100)
+    result = search_logs(client, filters, page, size)
+    json_response(
+      filters: filters,
+      total: result["total"],
+      page: page,
+      size: size,
+      results: result["results"],
+      count: result["results"].length,
+      logs: result["results"]
+    )
   rescue StandardError => e
     status 502
     json_response(error: e.message)
+  end
+
+  def positive_int(value, fallback, maximum = nil)
+    parsed = Integer(value || fallback)
+    parsed = fallback if parsed < 1
+    maximum ? [parsed, maximum].min : parsed
+  rescue ArgumentError, TypeError
+    fallback
   end
 
   def json_response(payload)
@@ -206,13 +251,14 @@ class LogSearchApp < Sinatra::Base
     true
   end
 
-  def search_logs(elasticsearch_client, filters)
-    hits = elasticsearch_client.search(
+  def search_logs(elasticsearch_client, filters, page = 1, size = 20)
+    search = elasticsearch_client.search(
       index: index_pattern_for_log_type(filters["log_type"]),
       query: build_query(filters),
-      size: DEFAULT_LIMIT
+      page: page,
+      size: size
     )
-    hits.filter_map do |hit|
+    logs = search["hits"].filter_map do |hit|
       source = hit.fetch("_source", {})
       source.merge(
         "id" => hit["_id"],
@@ -222,6 +268,7 @@ class LogSearchApp < Sinatra::Base
         "score" => hit["_score"]
       ).then { |log| log_matches_exact_filters?(log, filters) ? log : nil }
     end
+    { "total" => search["total"], "results" => logs }
   end
 
   def format_timestamp(value)

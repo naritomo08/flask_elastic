@@ -13,6 +13,7 @@ DEFAULT_TARGETS = {
     "java": "http://backend-java:5000",
     "php": "http://backend-php:5000",
     "ruby": "http://backend-ruby:5000",
+    "elixir": "http://backend-elixir:5000",
 }
 
 
@@ -99,6 +100,9 @@ def test_backend_health_contract_is_common(backend):
 
     assert status == 200
     assert isinstance(payload["ok"], bool)
+    assert payload["status"] in {"ok", "error"}
+    assert payload["backend"] == name
+    assert isinstance(payload["latency_ms"], int)
     assert payload["elasticsearch_url"]
     assert payload["index"]
 
@@ -113,11 +117,15 @@ def test_backend_logs_contract_is_common_when_elasticsearch_is_available(backend
     status, payload = request_json(
         base_url + "/api/logs",
         method="POST",
-        payload={"message": "", "log_type": "", "host": "", "program": ""},
+        payload={"message": "", "log_type": "", "host": "", "program": "", "page": 1, "size": 10},
     )
 
     assert status == 200
-    assert set(payload) == {"filters", "count", "logs"}
+    assert {"filters", "total", "page", "size", "results", "count", "logs"} <= set(payload)
+    assert isinstance(payload["total"], int)
+    assert payload["page"] == 1
+    assert payload["size"] in {10, 20}
+    assert payload["results"] == payload["logs"]
     assert isinstance(payload["count"], int)
     assert isinstance(payload["logs"], list)
     if payload["logs"]:

@@ -21,22 +21,23 @@ defmodule ElixirElastic.Router do
   end
 
   get "/health" do
-    json(conn, %{
-      ok: ElasticSearch.ping(),
-      elasticsearch_url: Application.fetch_env!(:elixir_elastic, :elasticsearch_url),
-      index: Application.fetch_env!(:elixir_elastic, :elasticsearch_index)
-    })
+    health =
+      ElasticSearch.health()
+      |> Map.put(:elasticsearch_url, Application.fetch_env!(:elixir_elastic, :elasticsearch_url))
+      |> Map.put(:index, Application.fetch_env!(:elixir_elastic, :elasticsearch_index))
+
+    json(conn, health)
   end
 
   get "/api/logs" do
     conn = fetch_query_params(conn)
     filters = normalize_filters(conn.query_params)
-    search_json(conn, filters)
+    search_json(conn, filters, conn.query_params)
   end
 
   post "/api/logs" do
     filters = normalize_filters(conn.body_params)
-    search_json(conn, filters)
+    search_json(conn, filters, conn.body_params)
   end
 
   get "/api/options" do
@@ -75,12 +76,24 @@ defmodule ElixirElastic.Router do
     |> send_resp(status, Jason.encode!(payload))
   end
 
-  defp search_json(conn, filters) do
+  defp search_json(conn, filters, params) do
     try do
-      logs = ElasticSearch.search_logs(filters)
-      json(conn, %{filters: filters, count: length(logs), logs: logs})
+      page = positive_int(params["page"], 1)
+      size = positive_int(params["size"], 20, 100)
+      result = ElasticSearch.search_logs(filters, page, size)
+      json(conn, Map.merge(result, %{filters: filters, count: length(result.results), logs: result.results}))
     rescue
       error -> json(conn, 502, %{error: Exception.message(error)})
     end
+  end
+
+  defp positive_int(value, fallback, maximum \\ nil) do
+    parsed =
+      case Integer.parse(to_string(value || fallback)) do
+        {number, ""} when number > 0 -> number
+        _ -> fallback
+      end
+
+    if maximum, do: min(parsed, maximum), else: parsed
   end
 end

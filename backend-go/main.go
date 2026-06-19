@@ -31,7 +31,8 @@ type App struct {
 
 type ElasticSearcher interface {
 	Ping(ctx context.Context) bool
-	Search(ctx context.Context, index string, query map[string]any, timeout time.Duration) ([]ElasticHit, error)
+	Info(ctx context.Context) (map[string]any, error)
+	Search(ctx context.Context, index string, query map[string]any, page int, size int, timeout time.Duration) (ElasticSearchResult, error)
 }
 
 type ElasticClient struct {
@@ -50,6 +51,11 @@ type Filters struct {
 
 type LogRecord map[string]any
 
+type LogSearchResult struct {
+	Total int
+	Logs  []LogRecord
+}
+
 type ElasticHit struct {
 	ID     string         `json:"_id"`
 	Index  string         `json:"_index"`
@@ -57,8 +63,14 @@ type ElasticHit struct {
 	Source map[string]any `json:"_source"`
 }
 
+type ElasticSearchResult struct {
+	Total int
+	Hits  []ElasticHit
+}
+
 type elasticResponse struct {
 	Hits struct {
+		Total any          `json:"total"`
 		Hits []ElasticHit `json:"hits"`
 	} `json:"hits"`
 	Error any `json:"error"`
@@ -127,7 +139,29 @@ func (c *ElasticClient) Ping(ctx context.Context) bool {
 	return resp.StatusCode >= 200 && resp.StatusCode < 400
 }
 
-func (c *ElasticClient) Search(ctx context.Context, index string, query map[string]any, timeout time.Duration) ([]ElasticHit, error) {
+func (c *ElasticClient) Info(ctx context.Context) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("elasticsearch info failed: %s", resp.Status)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func (c *ElasticClient) Search(ctx context.Context, index string, query map[string]any, page int, size int, timeout time.Duration) (ElasticSearchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -141,43 +175,44 @@ func (c *ElasticClient) Search(ctx context.Context, index string, query map[stri
 				},
 			},
 		},
-		"size":             defaultLimit,
-		"track_total_hits": false,
+		"from":             (page - 1) * size,
+		"size":             size,
+		"track_total_hits": true,
 		"timeout":          "5s",
 		"_source":          []string{"@timestamp", "host", "program", "msg", "severity", "dt", "hr"},
 	}
 	var payload bytes.Buffer
 	if err := json.NewEncoder(&payload).Encode(body); err != nil {
-		return nil, err
+		return ElasticSearchResult{}, err
 	}
 
 	searchURL := c.baseURL + "/" + strings.Trim(index, "/") + "/_search?ignore_unavailable=true"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, searchURL, &payload)
 	if err != nil {
-		return nil, err
+		return ElasticSearchResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return ElasticSearchResult{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("elasticsearch search failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		return ElasticSearchResult{}, fmt.Errorf("elasticsearch search failed: %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 
 	var decoded elasticResponse
 	decoder := json.NewDecoder(resp.Body)
 	decoder.UseNumber()
 	if err := decoder.Decode(&decoded); err != nil {
-		return nil, err
+		return ElasticSearchResult{}, err
 	}
 	if decoded.Error != nil {
-		return nil, fmt.Errorf("elasticsearch search failed: %v", decoded.Error)
+		return ElasticSearchResult{}, fmt.Errorf("elasticsearch search failed: %v", decoded.Error)
 	}
-	return decoded.Hits.Hits, nil
+	return ElasticSearchResult{Total: totalHits(decoded.Hits.Total), Hits: decoded.Hits.Hits}, nil
 }
 
 func (a *App) health(w http.ResponseWriter, r *http.Request) {
@@ -185,11 +220,26 @@ func (a *App) health(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"ok":                a.client.Ping(r.Context()),
+	startedAt := time.Now()
+	info, infoErr := a.client.Info(r.Context())
+	ok := infoErr == nil
+	payload := map[string]any{
+		"ok":                ok,
+		"status":            map[bool]string{true: "ok", false: "error"}[ok],
+		"backend":           "go",
 		"elasticsearch_url": elasticsearchURL,
 		"index":             elasticsearchIndex,
-	})
+		"latency_ms":        time.Since(startedAt).Milliseconds(),
+	}
+	if ok {
+		payload["cluster_name"] = fmt.Sprint(info["cluster_name"])
+		if version, found := info["version"].(map[string]any); found {
+			payload["version"] = fmt.Sprint(version["number"])
+		}
+	} else {
+		payload["error"] = infoErr.Error()
+	}
+	writeJSON(w, payload)
 }
 
 func (a *App) apiOptions(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +263,8 @@ func (a *App) apiSearchLogs(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	logs, err := searchLogs(r.Context(), a.client, filters)
+	page, size := paginationFromRequest(r)
+	result, err := searchLogs(r.Context(), a.client, filters, page, size)
 	if err != nil {
 		writeJSONStatus(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
 		return
@@ -221,9 +272,24 @@ func (a *App) apiSearchLogs(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, map[string]any{
 		"filters": filters,
-		"count":   len(logs),
-		"logs":    logs,
+		"total":   result.Total,
+		"page":    page,
+		"size":    size,
+		"results": result.Logs,
+		"count":   len(result.Logs),
+		"logs":    result.Logs,
 	})
+}
+
+func paginationFromRequest(r *http.Request) (int, int) {
+	values := r.URL.Query()
+	if r.Method == http.MethodPost && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		_ = r.ParseForm()
+		values = r.PostForm
+	}
+	page := positiveInt(values.Get("page"), 1, 0)
+	size := positiveInt(values.Get("size"), 20, 100)
+	return page, size
 }
 
 func filtersFromRequest(r *http.Request) (Filters, error) {
@@ -270,15 +336,15 @@ func normalizeFilters(filters Filters) Filters {
 	}
 }
 
-func searchLogs(ctx context.Context, client ElasticSearcher, filters Filters) ([]LogRecord, error) {
+func searchLogs(ctx context.Context, client ElasticSearcher, filters Filters, page int, size int) (LogSearchResult, error) {
 	query := buildQuery(filters)
-	hits, err := client.Search(ctx, indexPatternForLogType(filters.LogType), query, 15*time.Second)
+	result, err := client.Search(ctx, indexPatternForLogType(filters.LogType), query, page, size, 15*time.Second)
 	if err != nil {
-		return nil, err
+		return LogSearchResult{}, err
 	}
 
-	logs := make([]LogRecord, 0, len(hits))
-	for _, hit := range hits {
+	logs := make([]LogRecord, 0, len(result.Hits))
+	for _, hit := range result.Hits {
 		logRecord := LogRecord{
 			"id":       hit.ID,
 			"index":    hit.Index,
@@ -293,7 +359,32 @@ func searchLogs(ctx context.Context, client ElasticSearcher, filters Filters) ([
 			logs = append(logs, logRecord)
 		}
 	}
-	return logs, nil
+	return LogSearchResult{Total: result.Total, Logs: logs}, nil
+}
+
+func totalHits(value any) int {
+	switch typed := value.(type) {
+	case map[string]any:
+		return positiveInt(fmt.Sprint(typed["value"]), 0, 0)
+	case json.Number:
+		number, _ := typed.Int64()
+		return int(number)
+	case float64:
+		return int(typed)
+	default:
+		return positiveInt(fmt.Sprint(value), 0, 0)
+	}
+}
+
+func positiveInt(value string, fallback int, maximum int) int {
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 1 {
+		parsed = fallback
+	}
+	if maximum > 0 && parsed > maximum {
+		return maximum
+	}
+	return parsed
 }
 
 func buildQuery(filters Filters) map[string]any {

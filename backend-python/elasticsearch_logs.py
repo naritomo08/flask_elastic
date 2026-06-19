@@ -30,11 +30,30 @@ def wait_for_elasticsearch(client, retries=30, delay=2):
 
 
 def get_health(client):
-    return {
-        "ok": client.ping(),
-        "elasticsearch_url": ELASTICSEARCH_URL,
-        "index": INDEX_PATTERN,
-    }
+    started_at = time.monotonic()
+    try:
+        info = client.info()
+        body = getattr(info, "body", info)
+        return {
+            "ok": True,
+            "status": "ok",
+            "backend": "flask",
+            "elasticsearch_url": ELASTICSEARCH_URL,
+            "index": INDEX_PATTERN,
+            "latency_ms": round((time.monotonic() - started_at) * 1000),
+            "cluster_name": body.get("cluster_name", ""),
+            "version": body.get("version", {}).get("number", ""),
+        }
+    except Exception as error:
+        return {
+            "ok": False,
+            "status": "error",
+            "backend": "flask",
+            "elasticsearch_url": ELASTICSEARCH_URL,
+            "index": INDEX_PATTERN,
+            "latency_ms": round((time.monotonic() - started_at) * 1000),
+            "error": str(error),
+        }
 
 
 def format_timestamp(value):
@@ -168,23 +187,25 @@ def get_filter_options():
     }
 
 
-def search_logs(client, filters):
+def search_logs(client, filters, page=1, size=50):
     query = build_query(filters)
 
     response = client.search(
         index=index_pattern_for_log_type(filters["log_type"]),
         query=query,
         sort=[{"@timestamp": {"order": "desc", "unmapped_type": "date"}}],
-        size=50,
+        from_=(page - 1) * size,
+        size=size,
         ignore_unavailable=True,
-        track_total_hits=False,
+        track_total_hits=True,
         request_timeout=10,
         timeout="5s",
         source=["@timestamp", "host", "program", "msg", "severity", "dt", "hr"],
     )
+    body = getattr(response, "body", response)
 
     logs = []
-    for hit in response["hits"]["hits"]:
+    for hit in body["hits"]["hits"]:
         source = hit["_source"]
         log = {
             **source,
@@ -196,4 +217,6 @@ def search_logs(client, filters):
         }
         if log_matches_exact_filters(log, filters):
             logs.append(log)
-    return logs
+    total_value = body.get("hits", {}).get("total", 0)
+    total = total_value.get("value", 0) if isinstance(total_value, dict) else total_value
+    return {"total": int(total), "page": page, "size": size, "results": logs}

@@ -3,6 +3,7 @@ package com.example.flaskelastic;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -37,7 +38,9 @@ public class App {
     static final List<String> LOG_TYPES = List.of("syslog", "authlog");
     static final ZoneId JST = ZoneId.of("Asia/Tokyo");
     static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss 'JST'", Locale.ROOT);
-    static final ObjectMapper JSON = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+    static final ObjectMapper JSON = new ObjectMapper()
+            .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final Config config;
     private final QueryClient queryClient;
@@ -74,10 +77,25 @@ public class App {
     }
 
     private void handleHealth(HttpExchange exchange) throws IOException {
+        long startedAt = System.nanoTime();
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("ok", queryClient.ping());
+        try {
+            Map<String, Object> info = queryClient.info();
+            payload.put("ok", true);
+            payload.put("status", "ok");
+            payload.put("cluster_name", stringValue(info.get("cluster_name")));
+            if (info.get("version") instanceof Map<?, ?> version) {
+                payload.put("version", stringValue(version.get("number")));
+            }
+        } catch (Exception error) {
+            payload.put("ok", false);
+            payload.put("status", "error");
+            payload.put("error", error.getMessage());
+        }
+        payload.put("backend", "java");
         payload.put("elasticsearch_url", config.elasticsearchUrl);
         payload.put("index", config.elasticsearchIndex);
+        payload.put("latency_ms", (System.nanoTime() - startedAt) / 1_000_000);
         sendJson(exchange, 200, payload);
     }
 
@@ -96,21 +114,28 @@ public class App {
 
         try {
             Filters filters = filtersFromRequest(exchange);
-            List<LogRecord> logs = searchLogs(queryClient, config, filters, clock);
+            Map<String, String> params = parseQuery(exchange.getRequestURI().getRawQuery());
+            int page = positiveInt(params.get("page"), 1, null);
+            int size = positiveInt(params.get("size"), 20, 100);
+            LogSearchResult result = searchLogs(queryClient, config, filters, page, size, clock);
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("filters", filters);
-            payload.put("count", logs.size());
-            payload.put("logs", logs);
+            payload.put("total", result.total);
+            payload.put("page", page);
+            payload.put("size", size);
+            payload.put("results", result.logs);
+            payload.put("count", result.logs.size());
+            payload.put("logs", result.logs);
             sendJson(exchange, 200, payload);
         } catch (Exception ex) {
             sendJson(exchange, 502, Map.of("error", ex.getMessage()));
         }
     }
 
-    static List<LogRecord> searchLogs(QueryClient client, Config config, Filters filters, Clock clock) throws Exception {
-        List<SearchHit> hits = client.search(indexPatternForLogType(config, filters.logType), buildQuery(filters));
+    static LogSearchResult searchLogs(QueryClient client, Config config, Filters filters, int page, int size, Clock clock) throws Exception {
+        ElasticSearchResult result = client.search(indexPatternForLogType(config, filters.logType), buildQuery(filters), page, size);
         List<LogRecord> logs = new ArrayList<>();
-        for (SearchHit hit : hits) {
+        for (SearchHit hit : result.hits) {
             Map<String, Object> source = hit.source == null ? Map.of() : hit.source;
             LogRecord log = new LogRecord(
                     hit.id,
@@ -126,7 +151,18 @@ public class App {
                 logs.add(log);
             }
         }
-        return logs;
+        return new LogSearchResult(result.total, logs);
+    }
+
+    static int positiveInt(String value, int fallback, Integer maximum) {
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (Exception ignored) {
+            parsed = fallback;
+        }
+        if (parsed < 1) parsed = fallback;
+        return maximum == null ? parsed : Math.min(parsed, maximum);
     }
 
     static Map<String, Object> buildQuery(Filters filters) {
@@ -353,7 +389,8 @@ public class App {
 
     interface QueryClient {
         boolean ping();
-        List<SearchHit> search(String index, Map<String, Object> query) throws Exception;
+        Map<String, Object> info() throws Exception;
+        ElasticSearchResult search(String index, Map<String, Object> query, int page, int size) throws Exception;
     }
 
     record Config(
@@ -397,6 +434,12 @@ public class App {
     record SearchHit(String id, String index, Map<String, Object> source, Object score) {
     }
 
+    record ElasticSearchResult(int total, List<SearchHit> hits) {
+    }
+
+    record LogSearchResult(int total, List<LogRecord> logs) {
+    }
+
     static class ElasticsearchClient implements QueryClient {
         private final Config config;
         private final HttpClient client = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build();
@@ -422,12 +465,26 @@ public class App {
         }
 
         @Override
-        public List<SearchHit> search(String index, Map<String, Object> query) throws Exception {
+        public Map<String, Object> info() throws Exception {
+            HttpRequest request = HttpRequest.newBuilder(baseUri)
+                    .timeout(java.time.Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() < 200 || response.statusCode() >= 400) {
+                throw new IOException("elasticsearch info failed: HTTP " + response.statusCode());
+            }
+            return JSON.readValue(response.body(), new TypeReference<>() {});
+        }
+
+        @Override
+        public ElasticSearchResult search(String index, Map<String, Object> query, int page, int size) throws Exception {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("query", query);
             body.put("sort", List.of(Map.of("@timestamp", Map.of("order", "desc", "unmapped_type", "date"))));
-            body.put("size", config.elasticsearchLimit);
-            body.put("track_total_hits", false);
+            body.put("from", (page - 1) * size);
+            body.put("size", size);
+            body.put("track_total_hits", true);
             body.put("timeout", "5s");
             body.put("_source", List.of("@timestamp", "host", "program", "msg", "severity", "dt", "hr"));
 
@@ -448,7 +505,14 @@ public class App {
             List<SearchHit> results = new ArrayList<>();
             Object hitsObject = decoded.get("hits");
             if (!(hitsObject instanceof Map<?, ?> hitsMap) || !(hitsMap.get("hits") instanceof List<?> hitRows)) {
-                return results;
+                return new ElasticSearchResult(0, results);
+            }
+            int total = 0;
+            Object totalValue = hitsMap.get("total");
+            if (totalValue instanceof Map<?, ?> totalMap) {
+                total = Integer.parseInt(stringValue(totalMap.get("value")));
+            } else if (totalValue != null) {
+                total = Integer.parseInt(stringValue(totalValue));
             }
             for (Object hitRow : hitRows) {
                 Map<?, ?> hit = (Map<?, ?>) hitRow;
@@ -462,7 +526,7 @@ public class App {
                         hit.get("_score")
                 ));
             }
-            return results;
+            return new ElasticSearchResult(total, results);
         }
     }
 

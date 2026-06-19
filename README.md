@@ -1,6 +1,6 @@
 # flask_elastic
 
-既存の Elasticsearch に保存したログを、共通の静的フロントエンドと複数言語の API バックエンドで検索するアプリです。
+既存の Elasticsearch に保存したログを、共通の静的 SPA と複数言語の API バックエンドで検索・閲覧するアプリです。
 Elasticsearch は以下の記事の構成で作成済みのものを利用します。
 
 https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
@@ -29,7 +29,7 @@ Compose では以下のコンテナを起動します。
 - `backend-elixir`: Elixir / Plug.Cowboy で JSON API を提供します
 
 Elasticsearch / Kibana はこの Compose には含めません。
-フロントエンドは言語選択に応じて `/api/flask/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。
+フロントエンドは言語選択に応じて `/api/flask/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。選択した backend は Local Storage に保存されます。
 
 frontend の Docker ビルド時に CSS / JS の内容からハッシュ付きファイル名
 （例: `styles.a1b2c3d4e5f6.css`）を生成し、HTML 内の参照も自動で置き換えます。
@@ -54,9 +54,56 @@ curl -X POST http://localhost:8080/api/flask/logs \
   -H "Content-Type: application/json" \
   -d '{
     "message":"timeout",
-    "log_type":"syslog"
+    "log_type":"syslog",
+    "page":1,
+    "size":20
   }'
 ```
+
+GET でも同じ条件を指定できます。画面ではGET形式を使用するため、検索条件をURLのまま共有できます。
+
+```bash
+curl 'http://localhost:8080/api/flask/logs?message=timeout&log_type=syslog&page=1&size=20'
+```
+
+レスポンス:
+
+```json
+{
+  "filters": {},
+  "total": 1234,
+  "page": 1,
+  "size": 20,
+  "results": [],
+  "count": 20,
+  "logs": []
+}
+```
+
+`count` と `logs` は旧クライアントとの互換性のため残しています。
+
+## 画面機能
+
+- 最近のログをカード表示するトップ画面
+- メッセージ、時刻範囲、ログ種別、Host、Programによる検索
+- 検索条件のURL保存
+- 総件数表示とページング
+- 検索キーワードのハイライト
+- 全フィールドとRaw JSONを確認できるログ詳細ダイアログ
+- Raw JSONコピー
+- 検索結果のCSVダウンロード
+- Python／Elixir／PHP／Java／Go／Rubyのbackend切り替え
+- backend選択のLocal Storage保存
+- 6 backendの稼働状況を5秒ごとに自動更新
+- Elasticsearchの応答時間、バージョン、対象index表示
+- スマートフォン向けレスポンシブ表示
+
+画面URL:
+
+- トップ: <http://localhost:8080/>
+- ログ検索: <http://localhost:8080/search>
+- 条件付き検索: <http://localhost:8080/search?message=error&page=1&size=20>
+- 稼働状況: <http://localhost:8080/health>
 
 Go backend を frontend 経由で呼ぶ例:
 
@@ -72,8 +119,8 @@ curl -X POST http://localhost:8080/api/go/logs \
 curl http://localhost:8080/health
 ```
 
-`/health` は全 backend の `/health` を確認する疎通確認ページです。
-各カードの Elasticsearch 状態は、それぞれの backend から Elasticsearch へ ping した結果です。
+`/health` は全 backend の `/health` を5秒ごとに確認する疎通確認ページです。
+各カードには backend、Elasticsearch、応答時間、バージョン、対象indexを表示します。
 
 backend を直接確認する場合:
 
@@ -104,6 +151,7 @@ docker compose --profile test run --rm backend-contract-tests
 - `GET /` による backend メタ情報
 - `GET /health` によるヘルスチェック形式
 - `GET /api/options` による検索条件取得
+- `GET /health` の共通ステータス、backend名、応答時間
 
 Elasticsearch に接続できる環境で検索 API まで確認する場合:
 
@@ -111,7 +159,7 @@ Elasticsearch に接続できる環境で検索 API まで確認する場合:
 RUN_SEARCH_CONTRACT_TESTS=1 docker compose --profile test run --rm backend-contract-tests
 ```
 
-その場合は `POST /api/logs` のレスポンス形式も確認します。
+その場合は `POST /api/logs` のページングを含むレスポンス形式も6言語すべてで確認します。
 
 ## 設定
 

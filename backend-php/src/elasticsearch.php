@@ -201,28 +201,59 @@ function elasticsearch_ping(array $config): bool
     }
 }
 
-function elasticsearch_search(array $filters, array $config): array
+function elasticsearch_health(array $config): array
+{
+    $started = microtime(true);
+    try {
+        $info = elasticsearch_request('GET', rtrim($config['elasticsearch_url'], '/'), null, 3);
+        return [
+            'ok' => true,
+            'status' => 'ok',
+            'backend' => 'php',
+            'elasticsearch_url' => $config['elasticsearch_url'],
+            'index' => $config['elasticsearch_index'],
+            'latency_ms' => (int) round((microtime(true) - $started) * 1000),
+            'cluster_name' => (string) ($info['cluster_name'] ?? ''),
+            'version' => (string) ($info['version']['number'] ?? ''),
+        ];
+    } catch (Throwable $error) {
+        return [
+            'ok' => false,
+            'status' => 'error',
+            'backend' => 'php',
+            'elasticsearch_url' => $config['elasticsearch_url'],
+            'index' => $config['elasticsearch_index'],
+            'latency_ms' => (int) round((microtime(true) - $started) * 1000),
+            'error' => $error->getMessage(),
+        ];
+    }
+}
+
+function elasticsearch_search(array $filters, array $config, int $page, int $size): array
 {
     $index = index_pattern_for_log_type($filters['log_type'], $config);
     $url = rtrim($config['elasticsearch_url'], '/') . '/' . trim($index, '/') . '/_search?ignore_unavailable=true';
     $body = [
         'query' => build_query($filters, $config),
         'sort' => [['@timestamp' => ['order' => 'desc', 'unmapped_type' => 'date']]],
-        'size' => $config['default_limit'],
-        'track_total_hits' => false,
+        'from' => ($page - 1) * $size,
+        'size' => $size,
+        'track_total_hits' => true,
         'timeout' => '5s',
         '_source' => ['@timestamp', 'host', 'program', 'msg', 'severity', 'dt', 'hr'],
     ];
 
     $response = elasticsearch_request('POST', $url, $body);
-    return $response['hits']['hits'] ?? [];
+    $totalValue = $response['hits']['total'] ?? 0;
+    $total = is_array($totalValue) ? (int) ($totalValue['value'] ?? 0) : (int) $totalValue;
+    return ['total' => $total, 'hits' => $response['hits']['hits'] ?? []];
 }
 
-function search_logs(array $filters, array $config): array
+function search_logs(array $filters, array $config, int $page = 1, int $size = 20): array
 {
-    $hits = elasticsearch_search($filters, $config);
+    $search = elasticsearch_search($filters, $config, $page, $size);
     $logs = [];
-    foreach ($hits as $hit) {
+    foreach ($search['hits'] as $hit) {
         $source = is_array($hit['_source'] ?? null) ? $hit['_source'] : [];
         $log = array_merge($source, [
             'id' => $hit['_id'] ?? '',
@@ -235,5 +266,5 @@ function search_logs(array $filters, array $config): array
             $logs[] = $log;
         }
     }
-    return $logs;
+    return ['total' => $search['total'], 'page' => $page, 'size' => $size, 'results' => $logs];
 }

@@ -5,6 +5,15 @@ from elasticsearch_logs import get_client, get_filter_options, get_health, norma
 app = Flask(__name__)
 
 
+def positive_int(value, default, maximum=None):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    parsed = max(1, parsed)
+    return min(parsed, maximum) if maximum else parsed
+
+
 def filters_from_request():
     if request.is_json:
         return normalize_filters(request.get_json(silent=True) or {})
@@ -19,6 +28,7 @@ def api_root():
         {
             "service": "flask-elastic-backend",
             "endpoints": ["/health", "/api/options", "/api/logs"],
+            "features": ["pagination", "url-filters", "log-detail"],
         }
     )
 
@@ -37,11 +47,23 @@ def api_options():
 @app.route("/api/logs", methods=["GET", "POST"])
 def api_search_logs():
     filters = filters_from_request()
+    payload = request.get_json(silent=True) if request.is_json else None
+    values = payload or request.values
+    page = positive_int(values.get("page"), 1)
+    size = positive_int(values.get("size"), 20, 100)
     try:
-        logs = search_logs(get_client(), filters)
+        result = search_logs(get_client(), filters, page=page, size=size)
     except Exception as error:
         return jsonify({"error": str(error)}), 502
-    return jsonify({"filters": filters, "count": len(logs), "logs": logs})
+    results = result["results"]
+    return jsonify(
+        {
+            "filters": filters,
+            **result,
+            "count": len(results),
+            "logs": results,
+        }
+    )
 
 
 if __name__ == "__main__":
