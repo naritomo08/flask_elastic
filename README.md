@@ -31,6 +31,10 @@ Compose では以下のコンテナを起動します。
 Elasticsearch / Kibana はこの Compose には含めません。
 フロントエンドは言語選択に応じて `/api/flask/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。
 
+frontend の Docker ビルド時に CSS / JS の内容からハッシュ付きファイル名
+（例: `styles.a1b2c3d4e5f6.css`）を生成し、HTML 内の参照も自動で置き換えます。
+そのため、CSS / JS を変更した際に HTML 側のファイル名やクエリ文字列を手動更新する必要はありません。
+
 公開ポート:
 
 - `frontend`: http://localhost:8080
