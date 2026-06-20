@@ -91,12 +91,17 @@ async function renderHome() {
   document.title = "Elastic Log Explorer";
   const data = await api("/logs", { page: 1, size: 6 });
   currentResults = data.results || data.logs || [];
+  const total = Number(data.total ?? currentResults.length);
   apiLink.href = apiPath("/logs?page=1&size=6");
   app.innerHTML = `
     <section class="hero">
       <p class="eyebrow">OPERATIONAL LOG DISCOVERY</p>
       <h1>必要なログへ、<br>すばやく辿り着く。</h1>
       <p class="hero-copy">Elasticsearchに蓄積されたsyslog・authlogを、時刻、ホスト、プログラム、メッセージから横断検索できます。</p>
+      <div class="log-total" aria-label="現在のログ総量">
+        <span>現在のログ総量</span>
+        <strong>${total.toLocaleString("ja-JP")}<small> 件</small></strong>
+      </div>
       ${searchForm({}, true)}
     </section>
     <section class="section">

@@ -19,7 +19,7 @@ cp .env.example .env
 ```
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
 ブラウザで http://localhost:8080 を開きます。
@@ -87,7 +87,7 @@ curl 'http://localhost:8080/api/flask/logs?message=timeout&log_type=syslog&page=
 
 ## 画面機能
 
-- 最近のログをカード表示するトップ画面
+- 現在のログ総量と最近のログを表示するトップ画面
 - メッセージ、時刻範囲、ログ種別、Host、Programによる検索
 - 検索条件のURL保存
 - 総件数表示とページング

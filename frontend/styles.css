@@ -35,7 +35,11 @@ button { cursor: pointer; }
 .hero { padding: 88px 0 74px; text-align: center; }
 .eyebrow { margin: 0 0 10px; color: var(--green-dark); font-size: .72rem; font-weight: 900; letter-spacing: .18em; }
 .hero h1 { margin: 0; font-size: clamp(2.7rem, 7vw, 4.8rem); line-height: 1.14; letter-spacing: -.055em; }
-.hero-copy { max-width: 660px; margin: 24px auto 34px; color: var(--muted); }
+.hero-copy { max-width: 660px; margin: 24px auto 22px; color: var(--muted); }
+.log-total { display: inline-flex; align-items: baseline; gap: 12px; margin: 0 auto 28px; padding: 9px 16px; border: 1px solid #b8dbc5; border-radius: 999px; color: var(--green-dark); background: rgba(255,255,255,.72); box-shadow: 0 8px 24px rgba(25,64,41,.05); }
+.log-total span { color: var(--muted); font-size: .76rem; font-weight: 800; }
+.log-total strong { font-size: 1.35rem; line-height: 1; letter-spacing: -.02em; }
+.log-total small { font-size: .72rem; }
 .search-form { max-width: 900px; margin-inline: auto; }
 .primary-search { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
 .search-icon { position: relative; width: 18px; height: 18px; flex: none; border: 2px solid #8a9890; border-radius: 50%; }
