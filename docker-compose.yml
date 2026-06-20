@@ -1,3 +1,10 @@
+x-backend-environment: &backend-environment
+  ELASTICSEARCH_URL: ${ELASTICSEARCH_URL}
+  ELASTICSEARCH_INDEX: ${ELASTICSEARCH_INDEX}
+
+x-backend-extra-hosts: &backend-extra-hosts
+  - "elastic1:${ELASTICSEARCH_HOST_IP}"
+
 services:
   frontend:
     build: ./frontend
@@ -14,69 +21,39 @@ services:
 
   backend-python:
     build: ./backend-python
-    ports:
-      - "5005:5000"
     restart: unless-stopped
-    environment:
-      ELASTICSEARCH_URL: http://elastic1:9200
-      ELASTICSEARCH_INDEX: logs-*
-    extra_hosts:
-      - "elastic1:192.168.11.20"
+    environment: *backend-environment
+    extra_hosts: *backend-extra-hosts
 
   backend-go:
     build: ./backend-go
-    ports:
-      - "5006:5000"
     restart: unless-stopped
-    environment:
-      ELASTICSEARCH_URL: http://elastic1:9200
-      ELASTICSEARCH_INDEX: logs-*
-    extra_hosts:
-      - "elastic1:192.168.11.20"
+    environment: *backend-environment
+    extra_hosts: *backend-extra-hosts
 
   backend-java:
     build: ./backend-java
-    ports:
-      - "5007:5000"
     restart: unless-stopped
-    environment:
-      ELASTICSEARCH_URL: http://elastic1:9200
-      ELASTICSEARCH_INDEX: logs-*
-    extra_hosts:
-      - "elastic1:192.168.11.20"
+    environment: *backend-environment
+    extra_hosts: *backend-extra-hosts
 
   backend-php:
     build: ./backend-php
-    ports:
-      - "5008:5000"
     restart: unless-stopped
-    environment:
-      ELASTICSEARCH_URL: http://elastic1:9200
-      ELASTICSEARCH_INDEX: logs-*
-    extra_hosts:
-      - "elastic1:192.168.11.20"
+    environment: *backend-environment
+    extra_hosts: *backend-extra-hosts
 
   backend-ruby:
     build: ./backend-ruby
-    ports:
-      - "5009:5000"
     restart: unless-stopped
-    environment:
-      ELASTICSEARCH_URL: http://elastic1:9200
-      ELASTICSEARCH_INDEX: logs-*
-    extra_hosts:
-      - "elastic1:192.168.11.20"
+    environment: *backend-environment
+    extra_hosts: *backend-extra-hosts
 
   backend-elixir:
     build: ./backend-elixir
-    ports:
-      - "5010:5000"
     restart: unless-stopped
-    environment:
-      ELASTICSEARCH_URL: http://elastic1:9200
-      ELASTICSEARCH_INDEX: logs-*
-    extra_hosts:
-      - "elastic1:192.168.11.20"
+    environment: *backend-environment
+    extra_hosts: *backend-extra-hosts
 
   backend-contract-tests:
     build: ./backend-python

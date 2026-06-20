@@ -12,6 +12,12 @@ https://qiita.com/naritomo08/items/8368c2f57803e471cc2f
 
 ## 起動
 
+初回のみ、設定ファイルを作成します。
+
+```bash
+cp .env.example .env
+```
+
 ```bash
 docker compose up --build
 ```
@@ -35,15 +41,12 @@ frontend の Docker ビルド時に CSS / JS の内容からハッシュ付き�
 （例: `styles.a1b2c3d4e5f6.css`）を生成し、HTML 内の参照も自動で置き換えます。
 そのため、CSS / JS を変更した際に HTML 側のファイル名やクエリ文字列を手動更新する必要はありません。
 
-公開ポート:
+ホストへ公開するポート:
 
 - `frontend`: http://localhost:8080
-- `backend-python`: http://localhost:5005
-- `backend-go`: http://localhost:5006
-- `backend-java`: http://localhost:5007
-- `backend-php`: http://localhost:5008
-- `backend-ruby`: http://localhost:5009
-- `backend-elixir`: http://localhost:5010
+
+各 backend のポートはホストへ公開しません。backend は Compose の内部ネットワークで
+`backend-python:5000` などとして待ち受け、frontend の nginx または契約テストからのみ接続します。
 
 ## API
 
@@ -122,16 +125,16 @@ curl http://localhost:8080/health
 `/health` は全 backend の `/health` を5秒ごとに確認する疎通確認ページです。
 各カードには backend、Elasticsearch、応答時間、バージョン、対象indexを表示します。
 
-backend を直接確認する場合:
+Python backend を確認する場合:
 
 ```bash
-curl http://localhost:5005/health
+curl http://localhost:8080/health/flask
 ```
 
-追加 backend を直接確認する場合:
+Go backend の API を確認する場合:
 
 ```bash
-curl http://localhost:5006/api/options
+curl http://localhost:8080/api/go/options
 ```
 
 ## 共通 backend テスト
@@ -163,17 +166,23 @@ RUN_SEARCH_CONTRACT_TESTS=1 docker compose --profile test run --rm backend-contr
 
 ## 設定
 
-`docker-compose.yml` の環境変数で接続先とインデックス名を変更できます。
+プロジェクト直下の `.env` で、全 backend 共通の設定を変更できます。
+`.env` は Git の管理対象外です。初期値は `.env.example` を参照してください。
 
 - `ELASTICSEARCH_URL`: Elasticsearch の URL
 - `ELASTICSEARCH_INDEX`: 検索対象のインデックスパターン
+- `ELASTICSEARCH_HOST_IP`: `elastic1` に割り当てる IP アドレス
 
 例:
 
-```yaml
-environment:
-  ELASTICSEARCH_URL: http://elastic1:9200
-  ELASTICSEARCH_INDEX: logs-syslog-*
-extra_hosts:
-  - "elastic1:192.168.11.20"
+```dotenv
+ELASTICSEARCH_URL=http://elastic1:9200
+ELASTICSEARCH_INDEX=logs-syslog-*
+ELASTICSEARCH_HOST_IP=192.168.11.20
+```
+
+変更後はコンテナを再作成してください。
+
+```bash
+docker compose up -d --force-recreate
 ```
