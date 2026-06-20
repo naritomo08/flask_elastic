@@ -138,7 +138,7 @@ async function renderSearch() {
         <span>${page} / ${totalPages} ページ</span>
         ${currentResults.length ? `<button type="button" class="button-secondary" data-download-csv>CSVダウンロード</button>` : ""}
       </div>
-      ${currentResults.length ? `<div class="result-list">${currentResults.map((log, index) => resultCard(log, index, params.get("message") || "")).join("")}</div>${pagination(params, page, totalPages)}` : emptyState("一致するログがありません", "条件を減らすか、検索期間を広げてみてください。")}
+      ${currentResults.length ? `<div class="result-list">${currentResults.map((log, index) => resultCard(log, index, params.get("message") || "", params)).join("")}</div>${pagination(params, page, totalPages)}` : emptyState("一致するログがありません", "条件を減らすか、検索期間を広げてみてください。")}
     </section>`;
 }
 
@@ -172,29 +172,46 @@ function option(value, selected, label = value) {
 function logCard(log, index) {
   return `
     <article class="log-card">
-      <div class="card-meta"><time>${escapeHtml(log.display_time || "時刻不明")}</time>${badge(log.log_type)}</div>
-      <h3>${escapeHtml(log.program || "unknown program")}</h3>
-      <p class="host-label">${escapeHtml(log.host || "unknown host")}</p>
+      <div class="card-meta"><time>${escapeHtml(log.display_time || "時刻不明")}</time>${filterBadge(log.log_type)}</div>
+      <h3>${searchFilterLink("program", log.program, "unknown program")}</h3>
+      <p class="host-label">${searchFilterLink("host", log.host, "unknown host")}</p>
       <p class="message-preview">${escapeHtml(log.msg || "メッセージなし")}</p>
       <button type="button" class="card-link" data-log-index="${index}" data-result-index="${index}">ログ詳細を見る <span>→</span></button>
     </article>`;
 }
 
-function resultCard(log, index, keyword) {
+function resultCard(log, index, keyword, params) {
   return `
     <article class="result-card">
       <div class="result-card-top">
-        <div class="card-meta"><time>${escapeHtml(log.display_time || "時刻不明")}</time>${badge(log.log_type)}${log.severity ? `<span>${escapeHtml(log.severity)}</span>` : ""}</div>
+        <div class="card-meta"><time>${escapeHtml(log.display_time || "時刻不明")}</time>${filterBadge(log.log_type, params)}${log.severity ? `<span>${escapeHtml(log.severity)}</span>` : ""}</div>
         <span class="index-name">${escapeHtml(log.index || "")}</span>
       </div>
-      <div class="result-identity"><strong>${escapeHtml(log.host || "unknown host")}</strong><span>/</span><span>${escapeHtml(log.program || "unknown program")}</span></div>
+      <div class="result-identity">
+        ${searchFilterLink("host", log.host, "unknown host", params)}
+        <span>/</span>
+        ${searchFilterLink("program", log.program, "unknown program", params)}
+      </div>
       <p class="result-message">${highlight(log.msg || "", keyword)}</p>
       <button type="button" class="card-link" data-log-index="${index}" data-result-index="${index}">すべてのフィールドを表示 <span>→</span></button>
     </article>`;
 }
 
-function badge(type) {
-  return `<span class="log-type log-type-${escapeHtml(type || "unknown")}">${escapeHtml(type || "unknown")}</span>`;
+function searchFilterLink(field, value, fallback, currentParams) {
+  if (!value) return `<span>${escapeHtml(fallback)}</span>`;
+  const params = new URLSearchParams(currentParams || "");
+  params.set(field, value);
+  params.set("page", "1");
+  return `<a class="result-filter-link" href="/search?${escapeHtml(params.toString())}" data-route title="${escapeHtml(value)}で絞り込む">${escapeHtml(value)}</a>`;
+}
+
+function filterBadge(type, currentParams) {
+  const value = type || "unknown";
+  if (!type || type === "unknown") return `<span class="log-type">${escapeHtml(value)}</span>`;
+  const params = new URLSearchParams(currentParams || "");
+  params.set("log_type", type);
+  params.set("page", "1");
+  return `<a class="log-type log-type-${escapeHtml(type)}" href="/search?${escapeHtml(params.toString())}" data-route title="${escapeHtml(type)}で絞り込む">${escapeHtml(type)}</a>`;
 }
 
 function showLogDetail(index) {
