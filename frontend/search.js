@@ -16,6 +16,8 @@ const dialogTitle = document.querySelector("#dialog-title");
 let selectedBackend = localStorage.getItem("elastic-log-backend") || "flask";
 let currentResults = [];
 let healthTimer;
+let homeTimer;
+let homeUpdateInFlight = false;
 
 if (!BACKENDS[selectedBackend]) selectedBackend = "flask";
 backendSelect.value = selectedBackend;
@@ -73,6 +75,7 @@ renderRoute();
 
 async function renderRoute() {
   stopHealth();
+  stopHomeUpdates();
   window.scrollTo({ top: 0 });
   try {
     if (location.pathname === "/health") {
@@ -100,17 +103,66 @@ async function renderHome() {
       <p class="hero-copy">Elasticsearchに蓄積されたsyslog・authlogを、時刻、ホスト、プログラム、メッセージから横断検索できます。</p>
       <div class="log-total" aria-label="現在のログ総量">
         <span>現在のログ総量</span>
-        <strong>${total.toLocaleString("ja-JP")}<small> 件</small></strong>
+        <strong data-home-total>${total.toLocaleString("ja-JP")}<small> 件</small></strong>
       </div>
       ${searchForm({}, true)}
     </section>
     <section class="section">
       <div class="section-heading">
         <div><p class="eyebrow">RECENT EVENTS</p><h2>最近のログ</h2></div>
-        <a class="text-link" href="/search" data-route>すべて表示 →</a>
+        <div class="section-heading-actions">
+          <span class="live-update-status" data-home-updated>自動更新中</span>
+          <a class="text-link" href="/search" data-route>すべて表示 →</a>
+        </div>
       </div>
-      ${currentResults.length ? `<div class="log-grid">${currentResults.map((log, index) => logCard(log, index)).join("")}</div>` : emptyState("ログがありません", "Elasticsearchの接続先とインデックスを確認してください。")}
+      <div data-home-recent>${recentLogsMarkup(currentResults)}</div>
     </section>`;
+  updateHomeTimestamp();
+  homeTimer = window.setInterval(updateHome, 5000);
+}
+
+function recentLogsMarkup(logs) {
+  return logs.length
+    ? `<div class="log-grid">${logs.map((log, index) => logCard(log, index)).join("")}</div>`
+    : emptyState("ログがありません", "Elasticsearchの接続先とインデックスを確認してください。");
+}
+
+async function updateHome() {
+  if (location.pathname !== "/" || document.hidden || homeUpdateInFlight) return;
+  const backend = selectedBackend;
+  homeUpdateInFlight = true;
+  try {
+    const data = await api("/logs", { page: 1, size: 6 });
+    if (location.pathname !== "/" || selectedBackend !== backend) return;
+
+    currentResults = data.results || data.logs || [];
+    const total = Number(data.total ?? currentResults.length);
+    const totalElement = document.querySelector("[data-home-total]");
+    const recentElement = document.querySelector("[data-home-recent]");
+    if (totalElement) totalElement.innerHTML = `${total.toLocaleString("ja-JP")}<small> 件</small>`;
+    if (recentElement) recentElement.innerHTML = recentLogsMarkup(currentResults);
+    updateHomeTimestamp();
+  } catch {
+    const updated = document.querySelector("[data-home-updated]");
+    if (updated) {
+      updated.textContent = "更新に失敗しました";
+      updated.classList.add("is-error");
+    }
+  } finally {
+    homeUpdateInFlight = false;
+  }
+}
+
+function updateHomeTimestamp() {
+  const updated = document.querySelector("[data-home-updated]");
+  if (!updated) return;
+  updated.textContent = `自動更新 ${new Date().toLocaleTimeString("ja-JP")}`;
+  updated.classList.remove("is-error");
+}
+
+function stopHomeUpdates() {
+  window.clearInterval(homeTimer);
+  homeTimer = undefined;
 }
 
 async function renderSearch() {
@@ -314,7 +366,10 @@ async function api(path, params = {}) {
   Object.entries(params).forEach(([key, value]) => {
     if (value != null && String(value) !== "") query.set(key, value);
   });
-  const response = await fetch(apiPath(`${path}${query.size ? `?${query}` : ""}`), { headers: { Accept: "application/json" } });
+  const response = await fetch(apiPath(`${path}${query.size ? `?${query}` : ""}`), {
+    cache: "no-store",
+    headers: { Accept: "application/json" }
+  });
   let payload;
   try {
     payload = await response.json();

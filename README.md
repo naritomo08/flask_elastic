@@ -87,7 +87,7 @@ curl 'http://localhost:8080/api/flask/logs?message=timeout&log_type=syslog&page=
 
 ## 画面機能
 
-- 現在のログ総量と最近のログを表示するトップ画面
+- 現在のログ総量と最近のログを5秒ごとに自動更新するトップ画面
 - メッセージ、時刻範囲、ログ種別、Host、Programによる検索
 - 最近のログと検索結果のHost、Program、ログ種別クリックによる絞り込み
 - 検索条件のURL保存
