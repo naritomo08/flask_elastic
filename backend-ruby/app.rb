@@ -182,8 +182,8 @@ class LogSearchApp < Sinatra::Base
     filter = []
 
     must << text_search_clause("msg", filters["message"]) unless filters["message"].empty?
-    filter << exact_match_clause("host", filters["host"]) unless filters["host"].empty?
-    filter << exact_match_clause("program", filters["program"]) unless filters["program"].empty?
+    filter << exact_or_regex_clause("host", filters["host"]) unless filters["host"].empty?
+    filter << exact_or_regex_clause("program", filters["program"]) unless filters["program"].empty?
 
     time_range = {}
     time_range["gte"] = datetime_local_to_iso(filters["time_from"]) unless filters["time_from"].empty?
@@ -224,6 +224,25 @@ class LogSearchApp < Sinatra::Base
     }
   end
 
+  def regex_pattern(value)
+    value.start_with?("/") && value.end_with?("/") && value.length >= 2 ? value[1...-1] : nil
+  end
+
+  def exact_or_regex_clause(field, value)
+    pattern = regex_pattern(value)
+    return exact_match_clause(field, value) if pattern.nil?
+
+    {
+      bool: {
+        should: [
+          { regexp: { "#{field}.keyword" => { value: pattern, case_insensitive: true } } },
+          { regexp: { field => { value: pattern, case_insensitive: true } } }
+        ],
+        minimum_should_match: 1
+      }
+    }
+  end
+
   def wildcard_value(value)
     "*#{value.to_s.gsub("\\", "\\\\\\").gsub("*", "\\*").gsub("?", "\\?")}*"
   end
@@ -245,8 +264,8 @@ class LogSearchApp < Sinatra::Base
   end
 
   def log_matches_exact_filters?(log, filters)
-    return false if !filters["host"].empty? && log["host"] != filters["host"]
-    return false if !filters["program"].empty? && log["program"] != filters["program"]
+    return false if !filters["host"].empty? && regex_pattern(filters["host"]).nil? && log["host"] != filters["host"]
+    return false if !filters["program"].empty? && regex_pattern(filters["program"]).nil? && log["program"] != filters["program"]
 
     true
   end

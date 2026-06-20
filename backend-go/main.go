@@ -395,10 +395,10 @@ func buildQuery(filters Filters) map[string]any {
 		must = append(must, textSearchClause("msg", filters.Message))
 	}
 	if filters.Program != "" {
-		filterClauses = append(filterClauses, exactMatchClause("program", filters.Program))
+		filterClauses = append(filterClauses, exactOrRegexClause("program", filters.Program))
 	}
 	if filters.Host != "" {
-		filterClauses = append(filterClauses, exactMatchClause("host", filters.Host))
+		filterClauses = append(filterClauses, exactOrRegexClause("host", filters.Host))
 	}
 
 	timeRange := map[string]any{}
@@ -456,6 +456,29 @@ func exactMatchClause(field, value string) map[string]any {
 	}
 }
 
+func regexPattern(value string) (string, bool) {
+	if len(value) >= 2 && strings.HasPrefix(value, "/") && strings.HasSuffix(value, "/") {
+		return value[1 : len(value)-1], true
+	}
+	return "", false
+}
+
+func exactOrRegexClause(field, value string) map[string]any {
+	pattern, ok := regexPattern(value)
+	if !ok {
+		return exactMatchClause(field, value)
+	}
+	return map[string]any{
+		"bool": map[string]any{
+			"should": []any{
+				map[string]any{"regexp": map[string]any{field + ".keyword": map[string]any{"value": pattern, "case_insensitive": true}}},
+				map[string]any{"regexp": map[string]any{field: map[string]any{"value": pattern, "case_insensitive": true}}},
+			},
+			"minimum_should_match": 1,
+		},
+	}
+}
+
 func wildcardValue(value string) string {
 	escaped := strings.ReplaceAll(value, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `*`, `\*`)
@@ -483,10 +506,10 @@ func indexPatternForLogType(logType string) string {
 }
 
 func logMatchesExactFilters(log LogRecord, filters Filters) bool {
-	if filters.Host != "" && fmt.Sprint(log["host"]) != filters.Host {
+	if _, regex := regexPattern(filters.Host); filters.Host != "" && !regex && fmt.Sprint(log["host"]) != filters.Host {
 		return false
 	}
-	if filters.Program != "" && fmt.Sprint(log["program"]) != filters.Program {
+	if _, regex := regexPattern(filters.Program); filters.Program != "" && !regex && fmt.Sprint(log["program"]) != filters.Program {
 		return false
 	}
 	return true

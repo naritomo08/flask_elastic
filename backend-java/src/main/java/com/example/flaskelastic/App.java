@@ -173,10 +173,10 @@ public class App {
             must.add(textSearchClause("msg", filters.message));
         }
         if (!filters.host.isBlank()) {
-            filterClauses.add(exactMatchClause("host", filters.host));
+            filterClauses.add(exactOrRegexClause("host", filters.host));
         }
         if (!filters.program.isBlank()) {
-            filterClauses.add(exactMatchClause("program", filters.program));
+            filterClauses.add(exactOrRegexClause("program", filters.program));
         }
 
         Map<String, Object> timeRange = new LinkedHashMap<>();
@@ -226,6 +226,24 @@ public class App {
         ));
     }
 
+    static String regexPattern(String value) {
+        return value != null && value.length() >= 2 && value.startsWith("/") && value.endsWith("/")
+                ? value.substring(1, value.length() - 1)
+                : null;
+    }
+
+    static Map<String, Object> exactOrRegexClause(String field, String value) {
+        String pattern = regexPattern(value);
+        if (pattern == null) return exactMatchClause(field, value);
+        return Map.of("bool", Map.of(
+                "should", List.of(
+                        Map.of("regexp", Map.of(field + ".keyword", Map.of("value", pattern, "case_insensitive", true))),
+                        Map.of("regexp", Map.of(field, Map.of("value", pattern, "case_insensitive", true)))
+                ),
+                "minimum_should_match", 1
+        ));
+    }
+
     static String wildcardValue(String value) {
         return "*" + value.replace("\\", "\\\\").replace("*", "\\*").replace("?", "\\?") + "*";
     }
@@ -254,8 +272,8 @@ public class App {
     }
 
     static boolean logMatchesExactFilters(LogRecord log, Filters filters) {
-        if (!filters.host.isBlank() && !Objects.equals(log.host, filters.host)) return false;
-        if (!filters.program.isBlank() && !Objects.equals(log.program, filters.program)) return false;
+        if (!filters.host.isBlank() && regexPattern(filters.host) == null && !Objects.equals(log.host, filters.host)) return false;
+        if (!filters.program.isBlank() && regexPattern(filters.program) == null && !Objects.equals(log.program, filters.program)) return false;
         return true;
     }
 

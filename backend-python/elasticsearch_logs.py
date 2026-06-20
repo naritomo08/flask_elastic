@@ -135,10 +135,31 @@ def exact_match_clause(field, value):
     }
 
 
+def regex_pattern(value):
+    if len(value) >= 2 and value.startswith("/") and value.endswith("/"):
+        return value[1:-1]
+    return None
+
+
+def exact_or_regex_clause(field, value):
+    pattern = regex_pattern(value)
+    if pattern is None:
+        return exact_match_clause(field, value)
+    return {
+        "bool": {
+            "should": [
+                {"regexp": {f"{field}.keyword": {"value": pattern, "case_insensitive": True}}},
+                {"regexp": {field: {"value": pattern, "case_insensitive": True}}},
+            ],
+            "minimum_should_match": 1,
+        }
+    }
+
+
 def log_matches_exact_filters(log, filters):
     for field in ("host", "program"):
         expected = filters[field]
-        if expected and log.get(field) != expected:
+        if expected and regex_pattern(expected) is None and log.get(field) != expected:
             return False
     return True
 
@@ -150,10 +171,10 @@ def build_query(filters):
     if filters["message"]:
         must.append(text_search_clause("msg", filters["message"]))
     if filters["program"]:
-        filter_clauses.append(exact_match_clause("program", filters["program"]))
+        filter_clauses.append(exact_or_regex_clause("program", filters["program"]))
 
     if filters["host"]:
-        filter_clauses.append(exact_match_clause("host", filters["host"]))
+        filter_clauses.append(exact_or_regex_clause("host", filters["host"]))
 
     time_range = {}
     if filters["time_from"]:

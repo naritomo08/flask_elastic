@@ -22,6 +22,10 @@ let homeUpdateInFlight = false;
 
 if (!BACKENDS[selectedBackend]) selectedBackend = "flask";
 
+if (isPageReload() && location.pathname !== "/") {
+  history.replaceState({}, "", "/");
+}
+
 window.addEventListener("popstate", renderRoute);
 backendSelect.addEventListener("change", async () => {
   if (!backendSelect.value) return;
@@ -73,6 +77,12 @@ document.addEventListener("reset", (event) => {
 });
 
 initialize();
+
+function isPageReload() {
+  const navigation = performance.getEntriesByType?.("navigation")?.[0];
+  if (navigation) return navigation.type === "reload";
+  return performance.navigation?.type === 1;
+}
 
 async function initialize() {
   const results = await refreshBackendAvailability();
@@ -146,7 +156,7 @@ async function renderHome() {
     <section class="hero">
       <p class="eyebrow">OPERATIONAL LOG DISCOVERY</p>
       <h1>必要なログへ、<br>すばやく辿り着く。</h1>
-      <p class="hero-copy">Elasticsearchに蓄積されたsyslog・authlogを、時刻、ホスト、プログラム、メッセージから横断検索できます。</p>
+      <p class="hero-copy">Elasticsearchに蓄積されたsyslog・authlogを横断検索できます。HOST・PROGRAMは完全一致のほか、<code>/web.*/</code> のように囲むと正規表現で検索できます。</p>
       <div class="log-total" aria-label="現在のログ総量">
         <span>現在のログ総量</span>
         <strong data-home-total>${total.toLocaleString("ja-JP")}<small> 件</small></strong>
@@ -253,8 +263,8 @@ function searchForm(values = {}, hero = false) {
           <label><span>From (JST)</span><input type="datetime-local" name="time_from" value="${escapeHtml(values.time_from || "")}"></label>
           <label><span>To (JST)</span><input type="datetime-local" name="time_to" value="${escapeHtml(values.time_to || "")}"></label>
           <label><span>Log</span><select name="log_type"><option value="">すべて</option>${option("syslog", values.log_type)}${option("authlog", values.log_type)}</select></label>
-          <label><span>Host</span><input name="host" value="${escapeHtml(values.host || "")}" placeholder="elastic1"></label>
-          <label><span>Program</span><input name="program" value="${escapeHtml(values.program || "")}" placeholder="sshd"></label>
+          <label><span>Host</span><input name="host" value="${escapeHtml(values.host || "")}" placeholder="elastic1 または /web.*/"></label>
+          <label><span>Program</span><input name="program" value="${escapeHtml(values.program || "")}" placeholder="sshd または /ssh.*/"></label>
           <label><span>表示件数</span><select name="size">${[10, 20, 50, 100].map((value) => option(String(value), String(values.size || 20), `${value}件`)).join("")}</select></label>
         </div>
         <div class="filter-actions"><button type="reset" class="button-ghost">すべての条件をクリア</button></div>

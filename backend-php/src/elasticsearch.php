@@ -82,6 +82,30 @@ function exact_match_clause(string $field, string $value): array
     ];
 }
 
+function regex_pattern(string $value): ?string
+{
+    return strlen($value) >= 2 && str_starts_with($value, '/') && str_ends_with($value, '/')
+        ? substr($value, 1, -1)
+        : null;
+}
+
+function exact_or_regex_clause(string $field, string $value): array
+{
+    $pattern = regex_pattern($value);
+    if ($pattern === null) {
+        return exact_match_clause($field, $value);
+    }
+    return [
+        'bool' => [
+            'should' => [
+                ['regexp' => ["{$field}.keyword" => ['value' => $pattern, 'case_insensitive' => true]]],
+                ['regexp' => [$field => ['value' => $pattern, 'case_insensitive' => true]]],
+            ],
+            'minimum_should_match' => 1,
+        ],
+    ];
+}
+
 function build_query(array $filters, array $config): array
 {
     $must = [];
@@ -91,10 +115,10 @@ function build_query(array $filters, array $config): array
         $must[] = text_search_clause('msg', $filters['message']);
     }
     if ($filters['host'] !== '') {
-        $filter[] = exact_match_clause('host', $filters['host']);
+        $filter[] = exact_or_regex_clause('host', $filters['host']);
     }
     if ($filters['program'] !== '') {
-        $filter[] = exact_match_clause('program', $filters['program']);
+        $filter[] = exact_or_regex_clause('program', $filters['program']);
     }
 
     $timeRange = [];
@@ -140,10 +164,10 @@ function detect_log_type(string $indexName): string
 
 function log_matches_exact_filters(array $log, array $filters): bool
 {
-    if ($filters['host'] !== '' && ($log['host'] ?? '') !== $filters['host']) {
+    if ($filters['host'] !== '' && regex_pattern($filters['host']) === null && ($log['host'] ?? '') !== $filters['host']) {
         return false;
     }
-    if ($filters['program'] !== '' && ($log['program'] ?? '') !== $filters['program']) {
+    if ($filters['program'] !== '' && regex_pattern($filters['program']) === null && ($log['program'] ?? '') !== $filters['program']) {
         return false;
     }
     return true;

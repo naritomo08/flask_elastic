@@ -79,8 +79,8 @@ defmodule ElixirElastic.ElasticSearch do
 
     filter_clauses =
       []
-      |> append_exact_filter(filters["host"], "host")
-      |> append_exact_filter(filters["program"], "program")
+      |> append_exact_or_regex_filter(filters["host"], "host")
+      |> append_exact_or_regex_filter(filters["program"], "program")
       |> append_time_filter(filters["time_from"], filters["time_to"])
 
     cond do
@@ -182,12 +182,14 @@ defmodule ElixirElastic.ElasticSearch do
       ]
   end
 
-  defp append_exact_filter(filters, nil, _field), do: filters
-  defp append_exact_filter(filters, "", _field), do: filters
+  defp append_exact_or_regex_filter(filters, nil, _field), do: filters
+  defp append_exact_or_regex_filter(filters, "", _field), do: filters
 
-  defp append_exact_filter(filters, value, field) do
-    filters ++
-      [
+  defp append_exact_or_regex_filter(filters, value, field) do
+    pattern = regex_pattern(value)
+
+    clause =
+      if is_nil(pattern) do
         %{
           bool: %{
             should: [
@@ -197,7 +199,19 @@ defmodule ElixirElastic.ElasticSearch do
             minimum_should_match: 1
           }
         }
-      ]
+      else
+        %{
+          bool: %{
+            should: [
+              %{regexp: %{field => %{value: pattern, case_insensitive: true}}},
+              %{regexp: %{"#{field}.keyword" => %{value: pattern, case_insensitive: true}}}
+            ],
+            minimum_should_match: 1
+          }
+        }
+      end
+
+    filters ++ [clause]
   end
 
   defp append_time_filter(filters, "", ""), do: filters
@@ -241,8 +255,16 @@ defmodule ElixirElastic.ElasticSearch do
 
   defp matches_filter?(log, filters, field) do
     expected = Map.get(filters, field, "")
-    expected == "" or Map.get(log, field, "") == expected
+    expected == "" or not is_nil(regex_pattern(expected)) or Map.get(log, field, "") == expected
   end
+
+  defp regex_pattern(value) when is_binary(value) do
+    if String.length(value) >= 2 and String.starts_with?(value, "/") and String.ends_with?(value, "/") do
+      String.slice(value, 1, String.length(value) - 2)
+    end
+  end
+
+  defp regex_pattern(_value), do: nil
 
   defp add_seconds(value) do
     if String.length(value) == 16, do: value <> ":00", else: value
