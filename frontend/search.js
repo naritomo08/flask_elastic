@@ -9,21 +9,22 @@ const BACKENDS = {
 
 const app = document.querySelector("#app");
 const backendSelect = document.querySelector("#backend-select");
-const apiLink = document.querySelector("#api-link");
 const logDialog = document.querySelector("#log-dialog");
 const dialogBody = document.querySelector("#dialog-body");
 const dialogTitle = document.querySelector("#dialog-title");
 let selectedBackend = localStorage.getItem("elastic-log-backend") || "flask";
 let currentResults = [];
+let availabilityTimer;
+let availabilityUpdateInFlight = false;
 let healthTimer;
 let homeTimer;
 let homeUpdateInFlight = false;
 
 if (!BACKENDS[selectedBackend]) selectedBackend = "flask";
-backendSelect.value = selectedBackend;
 
 window.addEventListener("popstate", renderRoute);
 backendSelect.addEventListener("change", async () => {
+  if (!backendSelect.value) return;
   selectedBackend = backendSelect.value;
   localStorage.setItem("elastic-log-backend", selectedBackend);
   app.innerHTML = `<div class="loading-state">${escapeHtml(BACKENDS[selectedBackend].label)}へ切り替え中…</div>`;
@@ -71,7 +72,53 @@ document.addEventListener("reset", (event) => {
   });
 });
 
-renderRoute();
+initialize();
+
+async function initialize() {
+  const results = await refreshBackendAvailability();
+  if (results.some((result) => result.ok)) {
+    await renderRoute();
+  } else {
+    renderError("利用可能なバックエンドがありません。復旧を待っています。");
+  }
+  availabilityTimer = window.setInterval(monitorBackendAvailability, 5000);
+}
+
+async function monitorBackendAvailability() {
+  if (document.hidden || location.pathname === "/health" || availabilityUpdateInFlight) return;
+  availabilityUpdateInFlight = true;
+  const previousBackend = selectedBackend;
+  try {
+    const results = await refreshBackendAvailability();
+    const hasAvailableBackend = results.some((result) => result.ok);
+    if (!hasAvailableBackend) {
+      stopHomeUpdates();
+      renderError("利用可能なバックエンドがありません。復旧を待っています。");
+    } else if (selectedBackend !== previousBackend || document.querySelector(".error-page")) {
+      app.innerHTML = `<div class="loading-state">${escapeHtml(BACKENDS[selectedBackend].label)}へ切り替え中…</div>`;
+      await renderRoute();
+    }
+  } finally {
+    availabilityUpdateInFlight = false;
+  }
+}
+
+async function refreshBackendAvailability() {
+  const results = await Promise.all(Object.keys(BACKENDS).map(checkHealth));
+  const availableBackendIds = results.filter((result) => result.ok).map((result) => result.id);
+
+  if (availableBackendIds.length && !availableBackendIds.includes(selectedBackend)) {
+    selectedBackend = availableBackendIds[0];
+    localStorage.setItem("elastic-log-backend", selectedBackend);
+  }
+
+  backendSelect.innerHTML = availableBackendIds.length
+    ? availableBackendIds.map((id) => `<option value="${id}">${escapeHtml(BACKENDS[id].label)}</option>`).join("")
+    : `<option value="">利用可能なBackendなし</option>`;
+  backendSelect.disabled = availableBackendIds.length === 0;
+  backendSelect.value = availableBackendIds.length ? selectedBackend : "";
+  return results;
+}
 
 async function renderRoute() {
   stopHealth();
@@ -95,7 +142,6 @@ async function renderHome() {
   const data = await api("/logs", { page: 1, size: 6 });
   currentResults = data.results || data.logs || [];
   const total = Number(data.total ?? currentResults.length);
-  apiLink.href = apiPath("/logs?page=1&size=6");
   app.innerHTML = `
     <section class="hero">
       <p class="eyebrow">OPERATIONAL LOG DISCOVERY</p>
@@ -177,7 +223,6 @@ async function renderSearch() {
   currentResults = data.results || data.logs || [];
   const total = Number(data.total ?? currentResults.length);
   const totalPages = Math.max(1, Math.ceil(total / size));
-  apiLink.href = apiPath(`/logs?${params}`);
 
   app.innerHTML = `
     <section class="search-page-header">
@@ -289,7 +334,6 @@ function renderValue(value) {
 
 async function renderHealth() {
   document.title = "稼働状況 | Elastic Log Explorer";
-  apiLink.href = `/health/${selectedBackend}`;
   app.innerHTML = `
     <section class="health-page">
       <div class="health-page-header"><div><p class="eyebrow">SYSTEM HEALTH</p><h1>稼働状況</h1><p>6つのバックエンドとElasticsearchへの接続状態を確認します。</p></div><button class="button-secondary" type="button" data-health-refresh>↻ 今すぐ更新</button></div>
@@ -306,7 +350,7 @@ function healthCard(id, backend) {
 
 async function updateHealth() {
   if (location.pathname !== "/health") return;
-  const results = await Promise.all(Object.keys(BACKENDS).map(checkHealth));
+  const results = await refreshBackendAvailability();
   results.forEach(updateHealthCard);
   const okCount = results.filter((result) => result.ok).length;
   const summary = document.querySelector("[data-health-summary]");

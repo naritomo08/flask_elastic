@@ -28,9 +28,9 @@ button { cursor: pointer; }
 .brand strong, .brand small { display: block; }
 .brand small { margin-top: -3px; color: var(--muted); font-size: .72rem; letter-spacing: .04em; }
 .header-nav { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .84rem; font-weight: 800; }
-.header-nav > a:not(.api-link) { padding: 8px 4px; }
+.header-nav > a { padding: 8px 4px; }
 .backend-selector { display: flex; align-items: center; gap: 7px; font-size: .72rem; }
-.backend-selector select, .api-link, .button-secondary { min-height: 38px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--surface); font-weight: 700; }
+.backend-selector select, .button-secondary { min-height: 38px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--surface); font-weight: 700; }
 
 .hero { padding: 88px 0 74px; text-align: center; }
 .eyebrow { margin: 0 0 10px; color: var(--green-dark); font-size: .72rem; font-weight: 900; letter-spacing: .18em; }
