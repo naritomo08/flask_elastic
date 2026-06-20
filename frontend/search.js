@@ -160,7 +160,7 @@ function searchForm(values = {}, hero = false) {
           <label><span>Program</span><input name="program" value="${escapeHtml(values.program || "")}" placeholder="sshd"></label>
           <label><span>表示件数</span><select name="size">${[10, 20, 50, 100].map((value) => option(String(value), String(values.size || 20), `${value}件`)).join("")}</select></label>
         </div>
-        <div class="filter-actions"><button type="reset" class="button-ghost">条件をクリア</button><button type="submit">この条件で検索</button></div>
+        <div class="filter-actions"><button type="reset" class="button-ghost">すべての条件をクリア</button></div>
       </details>
     </form>`;
 }
