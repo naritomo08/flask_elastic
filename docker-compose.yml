@@ -8,6 +8,7 @@ x-backend-extra-hosts: &backend-extra-hosts
 services:
   frontend:
     build: ./frontend
+    container_name: elastic-search-frontend
     ports:
       - "8080:80"
     depends_on:
