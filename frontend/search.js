@@ -1,11 +1,6 @@
-const BACKENDS = {
-  flask: { label: "Python / Flask", color: "#3776ab" },
-  elixir: { label: "Elixir", color: "#6e4a7e" },
-  php: { label: "PHP", color: "#777bb4" },
-  java: { label: "Java", color: "#b07219" },
-  go: { label: "Go", color: "#00add8" },
-  ruby: { label: "Ruby", color: "#cc342d" }
-};
+import { checkBackendHealth, fetchBackendApi } from "./js/api.js";
+import { BACKENDS } from "./js/config.js";
+import { downloadCsv, escapeHtml, highlight, positiveInt } from "./js/utils.js";
 
 const app = document.querySelector("#app");
 const backendSelect = document.querySelector("#backend-select");
@@ -114,7 +109,7 @@ async function monitorBackendAvailability() {
 }
 
 async function refreshBackendAvailability() {
-  const results = await Promise.all(Object.keys(BACKENDS).map(checkHealth));
+  const results = await Promise.all(Object.keys(BACKENDS).map(checkBackendHealth));
   const availableBackendIds = results.filter((result) => result.ok).map((result) => result.id);
 
   if (availableBackendIds.length && !availableBackendIds.includes(selectedBackend)) {
@@ -372,20 +367,6 @@ async function updateHealth() {
   if (updated) updated.textContent = `最終更新 ${new Date().toLocaleTimeString("ja-JP")}`;
 }
 
-async function checkHealth(id) {
-  const started = performance.now();
-  try {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(`/health/${id}`, { cache: "no-store", signal: controller.signal });
-    window.clearTimeout(timer);
-    const payload = await response.json();
-    return { id, ok: response.ok && payload.ok === true, latency: Math.round(performance.now() - started), payload };
-  } catch (error) {
-    return { id, ok: false, latency: Math.round(performance.now() - started), error: error.name === "AbortError" ? "タイムアウト" : error.message };
-  }
-}
-
 function updateHealthCard(result) {
   const card = document.querySelector(`[data-health-card="${result.id}"]`);
   if (!card) return;
@@ -416,46 +397,7 @@ function pagination(params, page, totalPages) {
 }
 
 async function api(path, params = {}) {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value != null && String(value) !== "") query.set(key, value);
-  });
-  const response = await fetch(apiPath(`${path}${query.size ? `?${query}` : ""}`), {
-    cache: "no-store",
-    headers: { Accept: "application/json" }
-  });
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error("バックエンドから想定外のレスポンスが返されました。");
-  }
-  if (!response.ok) throw new Error(payload.error || "検索に失敗しました。");
-  return payload;
-}
-
-function apiPath(path) {
-  return `/api/${selectedBackend}${path}`;
-}
-
-function highlight(value, keyword) {
-  const text = escapeHtml(value);
-  if (!keyword) return text;
-  const escapedKeyword = escapeRegExp(escapeHtml(keyword));
-  return text.replace(new RegExp(`(${escapedKeyword})`, "gi"), "<mark>$1</mark>");
-}
-
-function downloadCsv(logs) {
-  const fields = ["display_time", "log_type", "host", "program", "msg", "severity", "index", "id"];
-  const csv = [fields, ...logs.map((log) => fields.map((field) => log[field] ?? ""))]
-    .map((row) => row.map((value) => `"${String(value).replaceAll("\"", "\"\"")}"`).join(","))
-    .join("\r\n");
-  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}\r\n`], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `elastic-logs-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  return fetchBackendApi(selectedBackend, path, params);
 }
 
 function renderError(message) {
@@ -464,19 +406,4 @@ function renderError(message) {
 
 function emptyState(title, description) {
   return `<div class="empty-state"><h3>${title}</h3><p>${description}</p></div>`;
-}
-
-function positiveInt(value, fallback) {
-  const number = Number.parseInt(value, 10);
-  return Number.isFinite(number) && number > 0 ? number : fallback;
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function escapeHtml(value) {
-  const element = document.createElement("span");
-  element.textContent = String(value ?? "");
-  return element.innerHTML;
 }

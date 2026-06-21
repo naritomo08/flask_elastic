@@ -16,6 +16,8 @@ backend-elixir/
     └── elixir_elastic/
         ├── application.ex
         ├── elastic_search.ex
+        ├── query.ex
+        ├── log_formatter.ex
         └── router.ex
 ```
 
@@ -24,9 +26,11 @@ backend-elixir/
 - `config/runtime.exs`: 環境変数から接続先とポートを設定
 - `application.ex`: Cowboy を supervision tree に登録
 - `router.ex`: HTTP ルート、入力正規化、JSON レスポンス
-- `elastic_search.ex`: Elasticsearch 通信、検索 DSL、結果整形
+- `elastic_search.ex`: Elasticsearch 通信と検索実行
+- `query.ex`: 検索 DSL と時刻条件の生成
+- `log_formatter.ex`: 検索結果の整形と完全一致判定
 
-OTP 起動、HTTP、Elasticsearch は分離済みです。さらに整理する場合は `elastic_search.ex` のクエリ生成と結果整形を純粋関数モジュールへ分けるとテストしやすくなります。
+OTP 起動、HTTP、Elasticsearch 通信、クエリ生成、結果整形を分離しています。
 
 ## 設定
 

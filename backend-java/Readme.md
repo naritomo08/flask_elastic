@@ -13,14 +13,26 @@ backend-java/
     └── main/
         └── java/
             └── com/example/flaskelastic/
-                └── App.java
+                ├── App.java
+                ├── Config.java
+                ├── Models.java
+                ├── Values.java
+                ├── QueryBuilder.java
+                ├── LogFormatter.java
+                ├── LogService.java
+                └── ElasticsearchClient.java
 ```
 
 - `Dockerfile`: Maven ビルド後、JRE イメージで JAR を起動
 - `pom.xml`: Java 21、Jackson、JUnit、Shade plugin の設定
-- `App.java`: HTTP ハンドラー、設定、モデル、Elasticsearch クライアント、クエリ生成
+- `App.java`: 起動、HTTP ハンドラー、入力・レスポンス処理
+- `Config.java` / `Values.java`: 環境設定と共通値変換
+- `Models.java`: API・Elasticsearch 用レコードと通信インターフェース
+- `QueryBuilder.java`: 検索 DSL と時刻条件の生成
+- `LogFormatter.java` / `LogService.java`: 結果整形と検索ユースケース
+- `ElasticsearchClient.java`: Elasticsearch 通信
 
-`App.java` は複数責務を持つため、次に整理するなら `App`、`ElasticsearchClient`、`QueryBuilder`、`Config`、API 用レコードへ分割するのが自然です。現時点では単一ソースでビルドできる簡潔さを保ち、README で境界を明示しています。
+依存関係込みの単一JARを維持したまま、HTTP、設定、モデル、クエリ、通信、整形を分離しています。
 
 ## 設定
 

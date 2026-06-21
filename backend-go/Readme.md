@@ -6,21 +6,24 @@ Go 標準ライブラリで共通ログ検索 API を提供するコンテナで
 
 ```text
 backend-go/
-├── Dockerfile    # Go バイナリをビルドし実行イメージへコピー
-├── Readme.md     # このファイル
-├── go.mod        # Go モジュール定義
-└── main.go       # HTTP、Elasticsearch、検索条件、結果整形の全実装
+├── Dockerfile        # Go バイナリをビルドし実行イメージへコピー
+├── Readme.md         # このファイル
+├── go.mod            # Go モジュール定義
+├── main.go           # 起動、HTTP ルート、入力処理
+├── config.go         # 環境変数と共通設定
+├── model.go          # API・Elasticsearch 用の型とインターフェース
+├── elasticsearch.go  # Elasticsearch 通信
+└── query.go          # 検索 DSL、検索結果整形、時刻変換
 ```
 
-## `main.go` 内の主な領域
+## 主な責務
 
-- `App` とルートハンドラー: 共通 HTTP API
-- `ElasticSearcher` / `ElasticClient`: Elasticsearch 通信
-- `Filters` とリクエスト処理: GET・POST の入力正規化
-- クエリ生成関数: 全文、完全一致・正規表現、時刻範囲
-- 結果整形関数: JST 表示、ログ種別、互換フィールド
+- `main.go`: `App`、ルートハンドラー、GET・POST の入力正規化
+- `elasticsearch.go`: `ElasticClient` と検索リクエスト
+- `query.go`: 全文・完全一致・正規表現・時刻範囲と結果整形
+- `model.go`: 通信境界のインターフェースとデータ型
 
-現在は 1 ファイルで完結しています。次の整理では `http.go`、`elasticsearch.go`、`query.go`、`model.go` に分けると責務が明確になりますが、型とテストを同時に移す変更になるため、今回は構造の記録に留めています。
+単一バイナリのまま、HTTP、設定、通信、検索処理、モデルを分離しています。
 
 ## 設定
 

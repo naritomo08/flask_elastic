@@ -7,6 +7,8 @@
   "autoload": {
     "files": [
       "src/config.php",
+      "src/search_query.php",
+      "src/log_formatter.php",
       "src/elasticsearch.php",
       "src/http.php"
     ]

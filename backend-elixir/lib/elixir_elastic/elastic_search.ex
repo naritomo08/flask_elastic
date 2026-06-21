@@ -1,8 +1,9 @@
 defmodule ElixirElastic.ElasticSearch do
   @moduledoc false
 
+  alias ElixirElastic.{LogFormatter, Query}
+
   @log_types ["syslog", "authlog"]
-  @jst_offset_seconds 9 * 60 * 60
 
   def log_types, do: @log_types
 
@@ -28,18 +29,28 @@ defmodule ElixirElastic.ElasticSearch do
         }
 
       {:ok, %{status: status}} ->
-        %{ok: false, status: "error", backend: "elixir", latency_ms: System.monotonic_time(:millisecond) - started_at, error: "HTTP #{status}"}
+        %{
+          ok: false,
+          status: "error",
+          backend: "elixir",
+          latency_ms: System.monotonic_time(:millisecond) - started_at,
+          error: "HTTP #{status}"
+        }
 
       {:error, reason} ->
-        %{ok: false, status: "error", backend: "elixir", latency_ms: System.monotonic_time(:millisecond) - started_at, error: inspect(reason)}
+        %{
+          ok: false,
+          status: "error",
+          backend: "elixir",
+          latency_ms: System.monotonic_time(:millisecond) - started_at,
+          error: inspect(reason)
+        }
     end
   end
 
   def search_logs(filters, page \\ 1, size \\ 20) do
-    index = index_pattern_for_log_type(filters["log_type"])
-
     body = %{
-      query: build_query(filters),
+      query: Query.build(filters),
       sort: [%{"@timestamp" => %{order: "desc", unmapped_type: "date"}}],
       from: (page - 1) * size,
       size: size,
@@ -48,7 +59,8 @@ defmodule ElixirElastic.ElasticSearch do
       _source: ["@timestamp", "host", "program", "msg", "severity", "dt", "hr"]
     }
 
-    url = "#{elasticsearch_url()}/#{encode_index(index)}/_search"
+    url =
+      "#{elasticsearch_url()}/#{encode_index(index_pattern_for_log_type(filters["log_type"]))}/_search"
 
     case Req.post(url, json: body, params: [ignore_unavailable: true], receive_timeout: 10_000) do
       {:ok, %{status: status, body: response}} when status in 200..299 ->
@@ -56,11 +68,9 @@ defmodule ElixirElastic.ElasticSearch do
         total = if is_map(total_value), do: Map.get(total_value, "value", 0), else: total_value
 
         results =
-          response
-          |> get_in(["hits", "hits"])
-          |> Kernel.||([])
-          |> Enum.map(&format_hit/1)
-          |> Enum.filter(&matches_exact_filters?(&1, filters))
+          (get_in(response, ["hits", "hits"]) || [])
+          |> Enum.map(&LogFormatter.format_hit/1)
+          |> Enum.filter(&LogFormatter.matches_exact_filters?(&1, filters))
 
         %{total: total, page: page, size: size, results: results}
 
@@ -72,209 +82,11 @@ defmodule ElixirElastic.ElasticSearch do
     end
   end
 
-  def build_query(filters) do
-    must =
-      []
-      |> append_match(filters["message"], "msg")
-
-    filter_clauses =
-      []
-      |> append_exact_or_regex_filter(filters["host"], "host")
-      |> append_exact_or_regex_filter(filters["program"], "program")
-      |> append_time_filter(filters["time_from"], filters["time_to"])
-
-    cond do
-      must == [] and filter_clauses == [] ->
-        %{match_all: %{}}
-
-      must == [] ->
-        %{bool: %{filter: filter_clauses}}
-
-      filter_clauses == [] ->
-        %{bool: %{must: must}}
-
-      true ->
-        %{bool: %{must: must, filter: filter_clauses}}
-    end
-  end
-
-  def format_timestamp(nil), do: ""
-
-  def format_timestamp(value) when is_integer(value) or is_float(value) do
-    value
-    |> Kernel./(1000)
-    |> trunc()
-    |> DateTime.from_unix!()
-    |> DateTime.add(@jst_offset_seconds, :second)
-    |> Calendar.strftime("%Y/%m/%d %H:%M:%S JST")
-  end
-
-  def format_timestamp(value) when is_binary(value) do
-    normalized = String.replace(value, "Z", "+00:00")
-
-    case DateTime.from_iso8601(normalized) do
-      {:ok, datetime, _offset} ->
-        datetime
-        |> DateTime.add(@jst_offset_seconds, :second)
-        |> Calendar.strftime("%Y/%m/%d %H:%M:%S JST")
-
-      {:error, _reason} ->
-        value
-    end
-  end
-
-  def format_timestamp(value), do: to_string(value)
-
-  def datetime_local_to_iso(""), do: ""
-  def datetime_local_to_iso(nil), do: ""
-
-  def datetime_local_to_iso(value) do
-    with {:ok, naive} <- NaiveDateTime.from_iso8601(add_seconds(value)),
-         {:ok, utc} <-
-           DateTime.from_naive(NaiveDateTime.add(naive, -@jst_offset_seconds, :second), "Etc/UTC") do
-      DateTime.to_iso8601(utc)
-    else
-      _ -> value
-    end
-  end
-
-  def detect_log_type(index_name) do
-    cond do
-      String.contains?(index_name, "authlog") -> "authlog"
-      String.contains?(index_name, "syslog") -> "syslog"
-      true -> "unknown"
-    end
-  end
-
   def index_pattern_for_log_type(log_type) when log_type in @log_types, do: "logs-#{log_type}-*"
 
-  def index_pattern_for_log_type(_log_type),
+  def index_pattern_for_log_type(_),
     do: Application.fetch_env!(:elixir_elastic, :elasticsearch_index)
 
-  defp append_match(must, nil, _field), do: must
-  defp append_match(must, "", _field), do: must
-
-  defp append_match(must, value, field) do
-    must ++
-      [
-        %{
-          bool: %{
-            should: [
-              %{match: %{field => %{query: value, operator: "and"}}},
-              %{match_phrase: %{field => %{query: value}}},
-              %{
-                wildcard: %{
-                  "#{field}.keyword" => %{
-                    value: "*#{wildcard_escape(value)}*",
-                    case_insensitive: true
-                  }
-                }
-              },
-              %{
-                wildcard: %{
-                  field => %{value: "*#{wildcard_escape(value)}*", case_insensitive: true}
-                }
-              }
-            ],
-            minimum_should_match: 1
-          }
-        }
-      ]
-  end
-
-  defp append_exact_or_regex_filter(filters, nil, _field), do: filters
-  defp append_exact_or_regex_filter(filters, "", _field), do: filters
-
-  defp append_exact_or_regex_filter(filters, value, field) do
-    pattern = regex_pattern(value)
-
-    clause =
-      if is_nil(pattern) do
-        %{
-          bool: %{
-            should: [
-              %{term: %{field => value}},
-              %{term: %{"#{field}.keyword" => value}}
-            ],
-            minimum_should_match: 1
-          }
-        }
-      else
-        %{
-          bool: %{
-            should: [
-              %{regexp: %{field => %{value: pattern, case_insensitive: true}}},
-              %{regexp: %{"#{field}.keyword" => %{value: pattern, case_insensitive: true}}}
-            ],
-            minimum_should_match: 1
-          }
-        }
-      end
-
-    filters ++ [clause]
-  end
-
-  defp append_time_filter(filters, "", ""), do: filters
-  defp append_time_filter(filters, nil, nil), do: filters
-
-  defp append_time_filter(filters, time_from, time_to) do
-    range =
-      %{}
-      |> maybe_put("gte", datetime_local_to_iso(time_from))
-      |> maybe_put("lte", datetime_local_to_iso(time_to))
-
-    if range == %{}, do: filters, else: filters ++ [%{range: %{"@timestamp" => range}}]
-  end
-
-  defp maybe_put(map, _key, ""), do: map
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
-  defp wildcard_escape(value) do
-    value
-    |> String.replace("\\", "\\\\")
-    |> String.replace("*", "\\*")
-    |> String.replace("?", "\\?")
-  end
-
-  defp format_hit(hit) do
-    source = Map.get(hit, "_source", %{})
-    index = Map.get(hit, "_index", "")
-
-    source
-    |> Map.put("id", Map.get(hit, "_id"))
-    |> Map.put("index", index)
-    |> Map.put("log_type", detect_log_type(index))
-    |> Map.put("display_time", format_timestamp(Map.get(source, "@timestamp")))
-    |> Map.put("score", Map.get(hit, "_score"))
-  end
-
-  defp matches_exact_filters?(log, filters) do
-    matches_filter?(log, filters, "host") and matches_filter?(log, filters, "program")
-  end
-
-  defp matches_filter?(log, filters, field) do
-    expected = Map.get(filters, field, "")
-    expected == "" or not is_nil(regex_pattern(expected)) or Map.get(log, field, "") == expected
-  end
-
-  defp regex_pattern(value) when is_binary(value) do
-    if String.length(value) >= 2 and String.starts_with?(value, "/") and String.ends_with?(value, "/") do
-      String.slice(value, 1, String.length(value) - 2)
-    end
-  end
-
-  defp regex_pattern(_value), do: nil
-
-  defp add_seconds(value) do
-    if String.length(value) == 16, do: value <> ":00", else: value
-  end
-
-  defp elasticsearch_url do
-    Application.fetch_env!(:elixir_elastic, :elasticsearch_url)
-  end
-
-  defp encode_index(index) do
-    String.replace(index, "*", "%2A")
-  end
+  defp elasticsearch_url, do: Application.fetch_env!(:elixir_elastic, :elasticsearch_url)
+  defp encode_index(index), do: String.replace(index, "*", "%2A")
 end

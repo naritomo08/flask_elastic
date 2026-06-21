@@ -5,6 +5,8 @@ source_dir=${1:?usage: build.sh SOURCE_DIR OUTPUT_DIR}
 output_dir=${2:?usage: build.sh SOURCE_DIR OUTPUT_DIR}
 
 mkdir -p "$output_dir"
+mkdir -p "$output_dir/js"
+cp "$source_dir"/js/*.js "$output_dir/js/"
 
 for asset in styles.css search.js; do
     source_file="$source_dir/$asset"

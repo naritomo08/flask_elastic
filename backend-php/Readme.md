@@ -16,11 +16,13 @@ backend-php/
 │   └── index.php          # Slim アプリの起動点
 └── src/
     ├── config.php         # 環境変数と共通定数
-    ├── elasticsearch.php  # Elasticsearch 通信、クエリ生成、結果整形
+    ├── search_query.php   # 検索 DSL と時刻条件の生成
+    ├── log_formatter.php  # 時刻・ログ種別・完全一致判定
+    ├── elasticsearch.php  # Elasticsearch 通信と検索実行
     └── http.php           # Slim ルート、入力処理、JSON レスポンス
 ```
 
-HTTP、設定、Elasticsearch の責務は分離済みです。さらに分ける場合は `elasticsearch.php` 内の HTTP 通信とクエリ生成を別ファイルにすると、通信なしで検索 DSL を検証しやすくなります。
+HTTP、設定、Elasticsearch 通信、クエリ生成、結果整形を分離しています。
 
 ## 設定
 
