@@ -14,16 +14,18 @@
           <span class="brand-mark">E</span>
           <span><strong>Elastic Log Explorer</strong><small>Search across operational logs</small></span>
         </a>
-        <nav class="header-nav">
+        <div class="header-controls">
           <label class="backend-selector">
             <span>Backend</span>
             <select id="backend-select" aria-label="利用するバックエンド">
               <option value="">確認中…</option>
             </select>
           </label>
-          <a href="/search" data-route>ログ一覧</a>
-          <a href="/health" data-route>稼働状況</a>
-        </nav>
+          <nav class="header-nav">
+            <a href="/search" data-route>ログ一覧</a>
+            <a href="/health" data-route>稼働状況</a>
+          </nav>
+        </div>
       </div>
     </header>
 
