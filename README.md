@@ -101,6 +101,7 @@ curl 'http://localhost:8080/api/flask/logs?message=timeout&log_type=syslog&page=
 - backend選択のLocal Storage保存
 - 6 backendの稼働状況を5秒ごとに自動更新
 - Elasticsearchの応答時間、バージョン、対象index表示
+- frontendへのアクセスログ閲覧とCSVダウンロード
 - スマートフォン向けレスポンシブ表示
 
 画面URL:
@@ -174,6 +175,7 @@ RUN_SEARCH_CONTRACT_TESTS=1 docker compose --profile test run --rm backend-contr
 - `ELASTICSEARCH_URL`: Elasticsearch の URL
 - `ELASTICSEARCH_INDEX`: 検索対象のインデックスパターン
 - `ELASTICSEARCH_HOST_IP`: `elastic1` に割り当てる IP アドレス
+- `ACCESS_LOG_RETENTION_DAYS`: frontendアクセスログの保持日数（デフォルト14日）
 
 例:
 
@@ -181,7 +183,23 @@ RUN_SEARCH_CONTRACT_TESTS=1 docker compose --profile test run --rm backend-contr
 ELASTICSEARCH_URL=http://elastic1:9200
 ELASTICSEARCH_INDEX=logs-syslog-*
 ELASTICSEARCH_HOST_IP=192.168.11.20
+ACCESS_LOG_RETENTION_DAYS=14
 ```
+
+## アクセスログ
+
+frontendのNginxは、利用者操作に対応するリクエストをJSONL形式で日次保存します。
+稼働状況画面の「アクセスログ」で当日の直近100件を確認でき、当日分をCSVでダウンロードできます。
+ヘルスチェック、アクセスログAPI自身、CSS・JavaScript・画像などの静的ファイルは記録対象外です。
+
+```bash
+curl 'http://localhost:8080/api/access-logs?tail=100'
+curl 'http://localhost:8080/api/access-logs?full=1'
+curl 'http://localhost:8080/api/access-logs?date=2026-06-23&full=1'
+```
+
+ログは名前付きボリューム`frontend_access_logs`へ
+`access-YYYY-MM-DD.jsonl`として保存され、コンテナ再作成後も残ります。
 
 変更後はコンテナを再作成してください。
 

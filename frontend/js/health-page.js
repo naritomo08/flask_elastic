@@ -1,7 +1,9 @@
 import { BACKENDS } from "./config.js";
+import { escapeHtml } from "./utils.js";
 import { healthCard } from "./views.js";
 
 let healthTimer;
+let accessLogs = [];
 
 export async function renderHealth(app, refreshBackendAvailability) {
   document.title = "稼働状況 | Elastic Log Explorer";
@@ -10,6 +12,18 @@ export async function renderHealth(app, refreshBackendAvailability) {
       <div class="health-page-header"><div><p class="eyebrow">SYSTEM HEALTH</p><h1>稼働状況</h1><p>6つのバックエンドとElasticsearchへの接続状態を確認します。</p></div><button class="button-secondary" type="button" data-health-refresh>↻ 今すぐ更新</button></div>
       <div class="health-summary"><span class="health-dot is-checking"></span><strong data-health-summary>確認中…</strong><time data-health-updated></time></div>
       <div class="health-grid">${Object.entries(BACKENDS).map(([id, backend]) => healthCard(id, backend)).join("")}</div>
+      <section class="access-log-section">
+        <div class="access-log-heading">
+          <div><p class="eyebrow">ACCESS LOGS</p><h2>アクセスログ</h2></div>
+          <div class="access-log-actions"><span data-access-log-count>読込中…</span><button class="button-secondary" type="button" data-access-logs-csv disabled>CSVダウンロード</button></div>
+        </div>
+        <div class="access-log-table-wrap">
+          <table class="access-log-table">
+            <thead><tr><th>時刻</th><th>接続元</th><th>Method</th><th>URI</th><th>Status</th><th>応答時間</th></tr></thead>
+            <tbody data-access-log-body><tr><td colspan="6">アクセスログを読み込んでいます…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </section>`;
   await updateHealth(refreshBackendAvailability);
   healthTimer = window.setInterval(() => updateHealth(refreshBackendAvailability), 5000);
@@ -27,6 +41,7 @@ export async function updateHealth(refreshBackendAvailability) {
   dot?.classList.remove("is-checking", "is-healthy", "is-unhealthy");
   dot?.classList.add(okCount === results.length ? "is-healthy" : "is-unhealthy");
   if (updated) updated.textContent = `最終更新 ${new Date().toLocaleTimeString("ja-JP")}`;
+  await updateAccessLogs();
 }
 
 export function stopHealth() {
@@ -46,4 +61,51 @@ function updateHealthCard(result) {
   card.querySelector("[data-latency]").textContent = `${result.payload?.latency_ms ?? result.latency} ms`;
   card.querySelector("[data-version]").textContent = result.payload?.version || "—";
   card.querySelector("[data-index]").textContent = result.payload?.index || "—";
+}
+
+async function updateAccessLogs() {
+  const body = document.querySelector("[data-access-log-body]");
+  if (!body) return;
+  try {
+    const response = await fetch("/api/access-logs?tail=100", { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "取得できませんでした");
+    accessLogs = payload.logs || [];
+    document.querySelector("[data-access-log-count]").textContent = `${payload.date} / ${accessLogs.length}件`;
+    document.querySelector("[data-access-logs-csv]").disabled = accessLogs.length === 0;
+    body.innerHTML = accessLogs.length
+      ? [...accessLogs].reverse().map(accessLogRow).join("")
+      : `<tr><td colspan="6">本日のアクセスログはまだありません。</td></tr>`;
+  } catch (error) {
+    body.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
+    document.querySelector("[data-access-log-count]").textContent = "取得失敗";
+  }
+}
+
+function accessLogRow(log) {
+  const timestamp = log["@timestamp"] ? new Date(log["@timestamp"]).toLocaleString("ja-JP") : "—";
+  const status = Number(log.status);
+  return `<tr>
+    <td>${escapeHtml(timestamp)}</td>
+    <td>${escapeHtml(log.remote_addr || "—")}</td>
+    <td>${escapeHtml(log.method || "—")}</td>
+    <td class="access-log-uri" title="${escapeHtml(log.uri || "")}">${escapeHtml(log.uri || "—")}</td>
+    <td class="${status >= 400 ? "is-error" : ""}">${escapeHtml(log.status ?? "—")}</td>
+    <td>${escapeHtml(log.request_time ?? "—")} s</td>
+  </tr>`;
+}
+
+export async function downloadAccessLogsCsv() {
+  const response = await fetch("/api/access-logs?full=1", { cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "アクセスログを取得できませんでした。");
+  const fields = ["@timestamp", "remote_addr", "method", "uri", "status", "body_bytes_sent", "request_time", "upstream_addr", "user_agent"];
+  const rows = [fields, ...(payload.logs || []).map((log) => fields.map((field) => log[field] ?? ""))];
+  const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll("\"", "\"\"")}"`).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}\r\n`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `access-logs-${payload.date}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }

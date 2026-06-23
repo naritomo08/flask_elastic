@@ -6,23 +6,64 @@ x-backend-extra-hosts: &backend-extra-hosts
   - "elastic1:${ELASTICSEARCH_HOST_IP}"
 
 services:
+  access-logs:
+    build:
+      context: .
+      dockerfile: access-logs/Dockerfile
+    container_name: elastic-search-access-logs
+    environment:
+      ACCESS_LOG_DIR: /var/log/elastic-access
+      FRONTEND_CONTAINER_NAME: elastic-search-frontend
+      PORT: 8090
+      TZ: Asia/Tokyo
+    volumes:
+      - frontend_access_logs:/var/log/elastic-access:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     container_name: elastic-search-frontend
     ports:
       - "8080:80"
     depends_on:
+      - access-logs
       - backend-python
       - backend-go
       - backend-java
       - backend-php
       - backend-ruby
       - backend-elixir
+    environment:
+      TZ: Asia/Tokyo
+    volumes:
+      - frontend_access_logs:/var/log/elastic-access
     logging:
       driver: syslog
       options:
         syslog-address: "tcp://127.0.0.1:514"
         tag: "{{.Name}}"
+    restart: unless-stopped
+
+  access-log-maintenance:
+    image: alpine:3.22
+    command:
+      - /bin/sh
+      - -c
+      - while true; do find /logs -type f -name 'access-*.jsonl' -mtime +$${ACCESS_LOG_RETENTION_DAYS:-14} -delete; sleep 3600; done
+    environment:
+      ACCESS_LOG_RETENTION_DAYS: ${ACCESS_LOG_RETENTION_DAYS:-14}
+    volumes:
+      - frontend_access_logs:/logs
     restart: unless-stopped
 
   backend-python:
@@ -74,7 +115,11 @@ services:
       - backend-elixir
     volumes:
       - ./tests:/app/tests:ro
+      - ./access-logs:/app/access-logs:ro
     environment:
       BACKEND_TARGETS: flask=http://backend-python:5000,go=http://backend-go:5000,java=http://backend-java:5000,php=http://backend-php:5000,ruby=http://backend-ruby:5000,elixir=http://backend-elixir:5000
       RUN_SEARCH_CONTRACT_TESTS: ${RUN_SEARCH_CONTRACT_TESTS:-0}
     command: ["pytest", "/app/tests"]
+
+volumes:
+  frontend_access_logs:

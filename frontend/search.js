@@ -1,6 +1,6 @@
 import { checkBackendHealth, fetchBackendApi } from "./js/api.js";
 import { BACKENDS } from "./js/config.js";
-import { renderHealth, stopHealth, updateHealth } from "./js/health-page.js";
+import { downloadAccessLogsCsv, renderHealth, stopHealth, updateHealth } from "./js/health-page.js";
 import { showLogDetail } from "./js/log-dialog.js";
 import { downloadCsv, escapeHtml, positiveInt } from "./js/utils.js";
 import {
@@ -55,6 +55,7 @@ document.addEventListener("click", async (event) => {
 
   if (event.target.closest("[data-dialog-close]")) logDialog.close();
   if (event.target.closest("[data-health-refresh]")) await updateHealth(refreshBackendAvailability);
+  if (event.target.closest("[data-access-logs-csv]")) await downloadAccessLogsCsv();
   if (event.target.closest("[data-download-csv]")) downloadCsv(currentResults);
 });
 
