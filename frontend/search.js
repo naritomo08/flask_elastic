@@ -1,6 +1,6 @@
 import { checkBackendHealth, fetchBackendApi } from "./js/api.js";
 import { BACKENDS } from "./js/config.js";
-import { downloadAccessLogsCsv, renderHealth, stopHealth, updateHealth } from "./js/health-page.js";
+import { downloadAccessLogsCsv, renderHealth, stopHealth, updateAccessLogs, updateHealth } from "./js/health-page.js";
 import { showLogDetail } from "./js/log-dialog.js";
 import { downloadCsv, escapeHtml, positiveInt } from "./js/utils.js";
 import {
@@ -59,7 +59,12 @@ document.addEventListener("click", async (event) => {
   if (event.target.closest("[data-download-csv]")) downloadCsv(currentResults);
 });
 
-document.addEventListener("submit", (event) => {
+document.addEventListener("submit", async (event) => {
+  if (event.target.matches("[data-access-log-form]")) {
+    event.preventDefault();
+    await updateAccessLogs({ date: new FormData(event.target).get("date") });
+    return;
+  }
   if (!event.target.matches("[data-search-form]")) return;
   event.preventDefault();
   const params = new URLSearchParams(new FormData(event.target));

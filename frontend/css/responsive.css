@@ -26,5 +26,8 @@
   .index-name { max-width: 100%; }
   .log-fields div { grid-template-columns: 1fr; }
   .health-page-header { flex-direction: column; }
-  .access-log-heading { align-items: flex-start; flex-direction: column; }
+  .access-log-heading { align-items: stretch; flex-direction: column; }
+  .access-log-controls { display: grid; grid-template-columns: 1fr 1fr; }
+  .access-log-controls label { grid-column: 1 / -1; }
+  .access-log-controls input { width: 100%; }
 }
