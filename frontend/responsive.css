@@ -1,0 +1,29 @@
+@media (max-width: 780px) {
+  .container { width: min(100% - 28px, 1120px); }
+  .header-inner { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 12px; padding-top: 10px; }
+  .brand { min-width: 0; flex: 1 1 auto; }
+  .brand-mark { width: 46px; height: 46px; flex: none; font-size: 1.35rem; }
+  .brand strong { font-size: 1rem; line-height: 1.35; }
+  .brand small, .backend-selector > span { display: none; }
+  .header-controls { display: contents; }
+  .backend-selector { grid-column: 2; grid-row: 1; }
+  .header-nav { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); font-size: .9rem; text-align: center; }
+  .header-nav > a { padding: 8px 4px 10px; }
+  .backend-selector select { width: 126px; max-width: 32vw; min-height: 42px; }
+  .hero { width: 100%; padding: 64px 0; }
+  .hero h1 { font-size: clamp(2.65rem, 12vw, 3.4rem); }
+  .hero-copy { font-size: 1rem; }
+  .hero-search { width: 100%; }
+  .primary-search { padding-left: 15px; }
+  .primary-search button { padding-inline: 17px; }
+  .filter-grid, .log-grid, .health-grid { grid-template-columns: minmax(0, 1fr); }
+  .log-card { min-height: 0; padding: 20px; }
+  .section-heading, .results-summary, .health-page-header { align-items: flex-start; }
+  .section-heading-actions { align-items: flex-end; flex-direction: column-reverse; gap: 4px; }
+  .results-summary > strong { font-size: 2rem; }
+  .result-card { padding: 22px; }
+  .result-card-top { align-items: flex-start; flex-direction: column; }
+  .index-name { max-width: 100%; }
+  .log-fields div { grid-template-columns: 1fr; }
+  .health-page-header { flex-direction: column; }
+}
