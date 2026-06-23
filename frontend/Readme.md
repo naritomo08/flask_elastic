@@ -13,6 +13,11 @@ frontend/
 ├── nginx.conf          # SPA 配信、キャッシュ、API・health のルーティング
 ├── proxy_params.conf   # 各バックエンドへ渡す共通プロキシヘッダー
 ├── search.js           # 画面遷移、状態管理、ページ別のデータ取得
+├── css/
+│   ├── styles.css          # 共通レイアウトとトップ画面
+│   ├── search.css          # 検索結果画面
+│   ├── health-dialog.css   # 稼働状況、ログ詳細、共通状態表示
+│   └── responsive.css      # モバイル向け上書き
 ├── js/
 │   ├── api.js          # API 通信とヘルスチェック
 │   ├── config.js       # バックエンド表示設定
@@ -20,10 +25,6 @@ frontend/
 │   ├── log-dialog.js   # ログ詳細ダイアログ
 │   ├── utils.js        # エスケープ、強調表示、CSV、数値処理
 │   └── views.js        # フォーム、カード、ページ部品のHTML生成
-├── styles.css          # 共通レイアウトとトップ画面
-├── search.css          # 検索結果画面
-├── health-dialog.css   # 稼働状況、ログ詳細、共通状態表示
-└── responsive.css      # モバイル向け上書き
 ```
 
 ## 処理の流れ
@@ -41,7 +42,7 @@ frontend/
 - カードや検索フォームのHTMLを変える: `js/views.js`
 - ログ詳細を変える: `js/log-dialog.js`
 - 共通表示処理やCSVを変える: `js/utils.js`
-- 見た目を変える: 対応する CSS（共通・トップは `styles.css`）
+- 見た目を変える: `css/` 内の対応する CSS（共通・トップは `css/styles.css`）
 - API の転送先や URL を変える: `nginx.conf`
 - 共通の転送ヘッダーを変える: `proxy_params.conf`
 - アセットの生成方法を変える: `build.sh`
