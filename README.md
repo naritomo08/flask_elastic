@@ -48,6 +48,56 @@ frontend の Docker ビルド時に CSS / JS の内容からハッシュ付き�
 各 backend のポートはホストへ公開しません。backend は Compose の内部ネットワークで
 `backend-python:5000` などとして待ち受け、frontend の nginx または契約テストからのみ接続します。
 
+### frontendのsyslog設定
+
+`frontend`コンテナは、標準出力・標準エラーをDockerの`syslog` logging driverで
+Docker稼働ホストの`127.0.0.1:514/TCP`へ送信します。
+この設定を使用する場合は、コンテナを起動する前にホスト上でrsyslogやsyslog-ngなどを起動し、
+TCP 514番ポートで受信できるようにしてください。
+
+rsyslogを使用する場合の設定例:
+
+```conf
+# /etc/rsyslog.d/10-docker-frontend.conf
+module(load="imtcp")
+input(type="imtcp" port="514" address="127.0.0.1")
+
+if $programname == "elastic-search-frontend" then {
+    action(type="omfile" file="/var/log/elastic-search-frontend.log")
+    stop
+}
+```
+
+設定を反映し、待ち受け状態を確認します。
+
+```bash
+sudo systemctl restart rsyslog
+sudo ss -lntp | grep ':514'
+```
+
+`syslog-address`は`127.0.0.1`を指定しているため、通常はTCP 514番ポートを外部へ公開する必要はありません。
+ログファイルの権限やローテーションは、利用するsyslogサーバー側で設定してください。
+
+syslog転送を使用しない場合は、`docker-compose.yml`の`frontend`から次の部分を削除してから起動してください。
+この場合はDocker標準のlogging driverが使用されます。
+
+```yaml
+logging:
+  driver: syslog
+  options:
+    syslog-address: "tcp://127.0.0.1:514"
+    tag: "{{.Name}}"
+```
+
+設定を変更した場合は、`frontend`コンテナを再作成します。
+
+```bash
+docker compose up -d --force-recreate frontend
+```
+
+このsyslog設定が対象にするのはコンテナの標準出力・標準エラーです。
+後述する`frontend_access_logs`ボリュームへ保存されるアクセスログとは別のログです。
+
 ## API
 
 ログ検索:
