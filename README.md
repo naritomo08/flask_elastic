@@ -256,3 +256,18 @@ curl 'http://localhost:8080/api/access-logs?date=2026-06-23&full=1'
 ```bash
 docker compose up -d --force-recreate
 ```
+
+## おまけ情報
+
+`omake/readme1.md` には、このサイトのNginxアクセスログをアクセスログAPIから取得し、
+Elasticsearchのデータストリーム `logs-access-elastic` へ日次で取り込む手順をまとめています。
+
+主な内容:
+
+- アクセスログAPIの疎通確認
+- ILMポリシーとインデックステンプレートの作成
+- 取り込み用シェルの設置
+- 手動実行と取り込み結果の確認
+- cronによる前日分の定期取り込み
+
+本体の検索対象ログとは別に、このサイト自体の利用状況をElasticsearchへ蓄積したい場合の補足手順です。
