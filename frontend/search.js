@@ -16,14 +16,14 @@ const backendSelect = document.querySelector("#backend-select");
 const logDialog = document.querySelector("#log-dialog");
 const dialogBody = document.querySelector("#dialog-body");
 const dialogTitle = document.querySelector("#dialog-title");
-let selectedBackend = localStorage.getItem("elastic-log-backend") || "flask";
+let selectedBackend = localStorage.getItem("elastic-log-backend") || "python";
 let currentResults = [];
 let availabilityTimer;
 let availabilityUpdateInFlight = false;
 let homeTimer;
 let homeUpdateInFlight = false;
 
-if (!BACKENDS[selectedBackend]) selectedBackend = "flask";
+if (!BACKENDS[selectedBackend]) selectedBackend = "python";
 
 if (isPageReload() && location.pathname !== "/") {
   history.replaceState({}, "", "/");

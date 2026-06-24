@@ -1,8 +1,9 @@
-from flask import Flask, jsonify, request
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from elasticsearch_logs import get_client, get_filter_options, get_health, normalize_filters, search_logs
 
-app = Flask(__name__)
+app = FastAPI(title="Python Elastic Backend")
 
 
 def positive_int(value, default, maximum=None):
@@ -14,57 +15,72 @@ def positive_int(value, default, maximum=None):
     return min(parsed, maximum) if maximum else parsed
 
 
-def filters_from_request():
-    if request.is_json:
-        return normalize_filters(request.get_json(silent=True) or {})
+def is_json_request(request):
+    return request.headers.get("content-type", "").split(";", 1)[0].strip() == "application/json"
+
+
+async def json_body(request):
+    try:
+        payload = await request.json()
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+async def form_body(request):
+    return await request.form()
+
+
+async def request_values(request):
+    if is_json_request(request):
+        payload = await json_body(request)
+        return payload, payload
     if request.method == "POST":
-        return normalize_filters(request.form)
-    return normalize_filters(request.args)
+        values = await form_body(request)
+        return values, values
+    return request.query_params, request.query_params
 
 
 @app.get("/")
 def api_root():
-    return jsonify(
-        {
-            "service": "flask-elastic-backend",
-            "endpoints": ["/health", "/api/options", "/api/logs"],
-            "features": ["pagination", "url-filters", "log-detail"],
-        }
-    )
+    return {
+        "service": "fastapi-elastic-backend",
+        "endpoints": ["/health", "/api/options", "/api/logs"],
+        "features": ["pagination", "url-filters", "log-detail"],
+    }
 
 
 @app.get("/health")
 def health():
     client = get_client()
-    return jsonify(get_health(client))
+    return get_health(client)
 
 
 @app.get("/api/options")
 def api_options():
-    return jsonify(get_filter_options())
+    return get_filter_options()
 
 
-@app.route("/api/logs", methods=["GET", "POST"])
-def api_search_logs():
-    filters = filters_from_request()
-    payload = request.get_json(silent=True) if request.is_json else None
-    values = payload or request.values
+@app.api_route("/api/logs", methods=["GET", "POST"])
+async def api_search_logs(request: Request):
+    filters_source, values = await request_values(request)
+    filters = normalize_filters(filters_source)
     page = positive_int(values.get("page"), 1)
     size = positive_int(values.get("size"), 20, 100)
     try:
         result = search_logs(get_client(), filters, page=page, size=size)
     except Exception as error:
-        return jsonify({"error": str(error)}), 502
+        return JSONResponse({"error": str(error)}, status_code=502)
     results = result["results"]
-    return jsonify(
-        {
-            "filters": filters,
-            **result,
-            "count": len(results),
-            "logs": results,
-        }
-    )
+    return {
+        "filters": filters,
+        **result,
+        "count": len(results),
+        "logs": results,
+    }
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=5000)

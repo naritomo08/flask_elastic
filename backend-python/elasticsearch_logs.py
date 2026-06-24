@@ -38,7 +38,7 @@ def get_health(client):
         return {
             "ok": True,
             "status": "ok",
-            "backend": "flask",
+            "backend": "python",
             "elasticsearch_url": ELASTICSEARCH_URL,
             "index": INDEX_PATTERN,
             "latency_ms": round((time.monotonic() - started_at) * 1000),
@@ -49,7 +49,7 @@ def get_health(client):
         return {
             "ok": False,
             "status": "error",
-            "backend": "flask",
+            "backend": "python",
             "elasticsearch_url": ELASTICSEARCH_URL,
             "index": INDEX_PATTERN,
             "latency_ms": round((time.monotonic() - started_at) * 1000),

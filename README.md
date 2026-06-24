@@ -27,7 +27,7 @@ docker compose up -d --build
 Compose では以下のコンテナを起動します。
 
 - `frontend`: nginx で `frontend/` の HTML / CSS / JS を配信します
-- `backend-python`: Python / Flask / gunicorn で JSON API を提供します
+- `backend-python`: Python / FastAPI / uvicorn で JSON API を提供します
 - `backend-go`: Go で JSON API を提供します
 - `backend-java`: Java で JSON API を提供します
 - `backend-php`: PHP / Slim で JSON API を提供します
@@ -35,7 +35,7 @@ Compose では以下のコンテナを起動します。
 - `backend-elixir`: Elixir / Plug.Cowboy で JSON API を提供します
 
 Elasticsearch / Kibana はこの Compose には含めません。
-フロントエンドは言語選択に応じて `/api/flask/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。選択した backend は Local Storage に保存されます。
+フロントエンドは言語選択に応じて `/api/python/...` や `/api/go/...` を呼び、nginx が各 backend コンテナへプロキシします。選択した backend は Local Storage に保存されます。
 
 frontend の Docker ビルド時に CSS / JS の内容からハッシュ付きファイル名
 （例: `styles.a1b2c3d4e5f6.css`）を生成し、HTML 内の参照も自動で置き換えます。
@@ -103,7 +103,7 @@ docker compose up -d --force-recreate frontend
 ログ検索:
 
 ```bash
-curl -X POST http://localhost:8080/api/flask/logs \
+curl -X POST http://localhost:8080/api/python/logs \
   -H "Content-Type: application/json" \
   -d '{
     "message":"timeout",
@@ -116,7 +116,7 @@ curl -X POST http://localhost:8080/api/flask/logs \
 GET でも同じ条件を指定できます。画面ではGET形式を使用するため、検索条件をURLのまま共有できます。
 
 ```bash
-curl 'http://localhost:8080/api/flask/logs?message=timeout&log_type=syslog&page=1&size=20'
+curl 'http://localhost:8080/api/python/logs?message=timeout&log_type=syslog&page=1&size=20'
 ```
 
 レスポンス:
@@ -181,7 +181,7 @@ curl http://localhost:8080/health
 Python backend を確認する場合:
 
 ```bash
-curl http://localhost:8080/health/flask
+curl http://localhost:8080/health/python
 ```
 
 Go backend の API を確認する場合:
