@@ -1,5 +1,5 @@
 export const BACKENDS = {
-  python: { label: "Python / FastAPI", color: "#3776ab" },
+  python: { label: "Python", color: "#3776ab" },
   elixir: { label: "Elixir", color: "#6e4a7e" },
   php: { label: "PHP", color: "#777bb4" },
   java: { label: "Java", color: "#b07219" },
